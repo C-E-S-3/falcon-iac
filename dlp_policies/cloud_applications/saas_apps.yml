@@ -1,0 +1,42 @@
+---
+# Cloud Applications - SaaS Application Definitions
+# Define cloud applications for DLP monitoring
+
+falcon_dlp_cloud_applications:
+  - name: "Salesforce"
+    description: "Salesforce CRM"
+    urls:
+      - fqdn: "*.salesforce.com"
+        path: "/*"
+      - fqdn: "*.force.com"
+        path: "/*"
+
+  - name: "Slack"
+    description: "Slack messaging platform"
+    urls:
+      - fqdn: "*.slack.com"
+        path: "/*"
+      - fqdn: "files.slack.com"
+        path: "/*"
+
+  - name: "Microsoft Teams"
+    description: "Microsoft Teams collaboration platform"
+    urls:
+      - fqdn: "teams.microsoft.com"
+        path: "/*"
+      - fqdn: "*.teams.microsoft.com"
+        path: "/*"
+
+  - name: "Zoom"
+    description: "Zoom video conferencing"
+    urls:
+      - fqdn: "zoom.us"
+        path: "/*"
+      - fqdn: "*.zoom.us"
+        path: "/*"
+
+  - name: "ServiceNow"
+    description: "ServiceNow ITSM platform"
+    urls:
+      - fqdn: "*.service-now.com"
+        path: "/*"

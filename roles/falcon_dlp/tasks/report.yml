@@ -1,0 +1,113 @@
+---
+# Generate DLP Changes Summary Report
+
+- name: Initialize changes summary
+  ansible.builtin.set_fact:
+    _falcon_dlp_changes: "{{ _falcon_dlp_changes | default({}) }}"
+
+- name: Generate summary report
+  ansible.builtin.debug:
+    msg: |
+      ============================================================
+      CrowdStrike Falcon DLP - Changes Summary
+      ============================================================
+      State Mode: {{ falcon_dlp_state_mode | upper }}
+      Cloud Region: {{ falcon_cloud }}
+      {% if falcon_member_cid | default('') | length > 0 %}Member CID: {{ falcon_member_cid }}{% endif %}
+
+      {% if falcon_dlp_state_mode == 'report' %}
+      --- REPORT MODE (No changes applied) ---
+      {% endif %}
+
+      {% for resource_type, changes in _falcon_dlp_changes.items() %}
+      {{ resource_type | replace('_', ' ') | title }}:
+      {% if falcon_dlp_state_mode == 'report' %}
+        Would Create: {{ changes.would_create | default([]) | join(', ') or 'None' }}
+        Would Update: {{ changes.would_update | default([]) | join(', ') or 'None' }}
+        Would Delete: {{ changes.would_delete | default([]) | join(', ') or 'None' }}
+      {% else %}
+        Created: {{ changes.created | default([]) | join(', ') or 'None' }}
+        Updated: {{ changes.updated | default([]) | join(', ') or 'None' }}
+        Deleted: {{ changes.deleted | default([]) | join(', ') or 'None' }}
+      {% endif %}
+      {% endfor %}
+
+      ============================================================
+
+- name: Set report facts for programmatic access
+  ansible.builtin.set_fact:
+    falcon_dlp_report:
+      state_mode: "{{ falcon_dlp_state_mode }}"
+      cloud: "{{ falcon_cloud }}"
+      member_cid: "{{ falcon_member_cid | default('') }}"
+      changes: "{{ _falcon_dlp_changes }}"
+      summary:
+        total_created: >-
+          {{
+            _falcon_dlp_changes.values() |
+            map(attribute='created', default=[]) |
+            map('length') |
+            sum
+          }}
+        total_updated: >-
+          {{
+            _falcon_dlp_changes.values() |
+            map(attribute='updated', default=[]) |
+            map('length') |
+            sum
+          }}
+        total_deleted: >-
+          {{
+            _falcon_dlp_changes.values() |
+            map(attribute='deleted', default=[]) |
+            map('length') |
+            sum
+          }}
+        total_would_create: >-
+          {{
+            _falcon_dlp_changes.values() |
+            map(attribute='would_create', default=[]) |
+            map('length') |
+            sum
+          }}
+        total_would_update: >-
+          {{
+            _falcon_dlp_changes.values() |
+            map(attribute='would_update', default=[]) |
+            map('length') |
+            sum
+          }}
+        total_would_delete: >-
+          {{
+            _falcon_dlp_changes.values() |
+            map(attribute='would_delete', default=[]) |
+            map('length') |
+            sum
+          }}
+
+- name: Display drift warning in report mode
+  ansible.builtin.debug:
+    msg: |
+      WARNING: Drift detected!
+
+      The following changes would be made if running with state_mode='ignore' or 'delete':
+      - {{ falcon_dlp_report.summary.total_would_create }} resources would be created
+      - {{ falcon_dlp_report.summary.total_would_update }} resources would be updated
+      - {{ falcon_dlp_report.summary.total_would_delete }} resources would be deleted (delete mode only)
+
+      Run with '-e falcon_dlp_state_mode=ignore' to apply changes (additive only)
+      Run with '-e falcon_dlp_state_mode=delete' to fully reconcile (includes deletions)
+  when:
+    - falcon_dlp_state_mode == 'report'
+    - (falcon_dlp_report.summary.total_would_create | int > 0) or
+      (falcon_dlp_report.summary.total_would_update | int > 0) or
+      (falcon_dlp_report.summary.total_would_delete | int > 0)
+
+- name: Confirm no drift in report mode
+  ansible.builtin.debug:
+    msg: "No drift detected. CrowdStrike DLP configuration matches defined state."
+  when:
+    - falcon_dlp_state_mode == 'report'
+    - (falcon_dlp_report.summary.total_would_create | int == 0)
+    - (falcon_dlp_report.summary.total_would_update | int == 0)
+    - (falcon_dlp_report.summary.total_would_delete | int == 0)

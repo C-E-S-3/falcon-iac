@@ -1,0 +1,63 @@
+---
+# Content Patterns - Compliance and Regulatory
+# Patterns for detecting compliance-related sensitive data
+
+falcon_dlp_content_patterns:
+  # HIPAA - Healthcare
+  - name: "Medical Record Number"
+    description: "Detects medical record numbers (MRN) patterns"
+    category: "healthcare"
+    region: "us"
+    min_match_threshold: 1
+    regexes:
+      - '\bMRN[\s:#]?\d{6,10}\b'
+      - '\bMedical Record[\s:#]?\d{6,10}\b'
+    example: "MRN: 1234567890"
+
+  - name: "ICD-10 Diagnosis Code"
+    description: "Detects ICD-10 diagnosis codes"
+    category: "healthcare"
+    region: "global"
+    min_match_threshold: 3
+    regexes:
+      - '\b[A-TV-Z]\d{2}(?:\.\d{1,4})?\b'
+    example: "J18.9"
+
+  # Financial - ABA Routing Numbers
+  - name: "ABA Routing Number"
+    description: "Detects US bank ABA routing numbers"
+    category: "financial"
+    region: "us"
+    min_match_threshold: 1
+    regexes:
+      - '\b(?:0[1-9]|[12]\d|3[0-2])\d{7}\b'
+    example: "021000021"
+
+  # API Keys and Secrets
+  - name: "AWS Access Key"
+    description: "Detects AWS access key IDs"
+    category: "credentials"
+    region: "global"
+    min_match_threshold: 1
+    regexes:
+      - '\bAKIA[0-9A-Z]{16}\b'
+    example: "AKIAIOSFODNN7EXAMPLE"
+
+  - name: "Generic API Key"
+    description: "Detects generic API key patterns"
+    category: "credentials"
+    region: "global"
+    min_match_threshold: 1
+    regexes:
+      - '\b(?:api[_-]?key|apikey|api_secret|api_token)[\s:=]+["\']?[A-Za-z0-9_-]{20,}["\']?'
+    example: "api_key=abc123def456ghi789jkl012"
+
+  # Passwords in code
+  - name: "Hardcoded Password"
+    description: "Detects potential hardcoded passwords in code"
+    category: "credentials"
+    region: "global"
+    min_match_threshold: 1
+    regexes:
+      - '\b(?:password|passwd|pwd)[\s:=]+["\'][^"\']{8,}["\']'
+    example: "password='MySecretPass123'"

@@ -1,0 +1,56 @@
+---
+# Classifications - Compliance Data
+# Group compliance-related patterns into classifications
+
+falcon_dlp_classifications:
+  - name: "HIPAA - Protected Health Information"
+    description: "Detects documents containing PHI/medical records"
+    enabled: true
+    content_patterns:
+      - "Medical Record Number"
+      - "ICD-10 Diagnosis Code"
+    file_types:
+      - "pdf"
+      - "docx"
+      - "xlsx"
+      - "txt"
+    rules:
+      - detection_severity: "critical"
+        response_action: "block"
+        trigger_detection: true
+
+  - name: "Financial - Banking Information"
+    description: "Detects documents containing banking details"
+    enabled: true
+    content_patterns:
+      - "ABA Routing Number"
+    file_types:
+      - "pdf"
+      - "docx"
+      - "xlsx"
+      - "txt"
+      - "csv"
+    rules:
+      - detection_severity: "high"
+        response_action: "monitor"
+        trigger_detection: true
+
+  - name: "Credentials - API Keys and Secrets"
+    description: "Detects code or documents containing API keys and credentials"
+    enabled: true
+    content_patterns:
+      - "AWS Access Key"
+      - "Generic API Key"
+      - "Hardcoded Password"
+    file_types:
+      - "txt"
+      - "py"
+      - "js"
+      - "json"
+      - "yml"
+      - "yaml"
+      - "env"
+    rules:
+      - detection_severity: "critical"
+        response_action: "block"
+        trigger_detection: true

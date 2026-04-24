@@ -1,0 +1,67 @@
+---
+# Report on CrowdStrike Falcon DLP Configuration Drift
+#
+# This playbook always runs in report mode to detect drift between
+# your YAML definitions and the actual CrowdStrike configuration.
+#
+# Usage:
+#   ansible-playbook playbooks/dlp_report.yml -i inventories/dev/hosts.yml
+#
+#   # With debug output
+#   ansible-playbook playbooks/dlp_report.yml -i inventories/dev/hosts.yml -e falcon_dlp_debug=true
+
+- name: Report CrowdStrike Falcon DLP Configuration Drift
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # Force report mode - this playbook is always read-only
+    falcon_dlp_state_mode: "report"
+
+  pre_tasks:
+    - name: Display report configuration
+      ansible.builtin.debug:
+        msg: |
+          CrowdStrike Falcon DLP Drift Report
+          ====================================
+          Cloud: {{ falcon_cloud | default('us-1') }}
+          Policies Dir: {{ falcon_dlp_policies_dir | default('dlp_policies') }}
+
+          This is a read-only operation. No changes will be made.
+
+  roles:
+    - role: falcon_dlp
+
+  post_tasks:
+    - name: Set exit code based on drift
+      ansible.builtin.set_fact:
+        _has_drift: >-
+          {{
+            (falcon_dlp_report.summary.total_would_create | int > 0) or
+            (falcon_dlp_report.summary.total_would_update | int > 0) or
+            (falcon_dlp_report.summary.total_would_delete | int > 0)
+          }}
+
+    - name: Report drift status
+      ansible.builtin.debug:
+        msg: |
+          {% if _has_drift %}
+          DRIFT DETECTED - Configuration does not match defined state
+
+          Summary:
+          - {{ falcon_dlp_report.summary.total_would_create }} resources need to be created
+          - {{ falcon_dlp_report.summary.total_would_update }} resources need to be updated
+          - {{ falcon_dlp_report.summary.total_would_delete }} resources would be deleted (in delete mode)
+
+          Run 'dlp_deploy.yml -e falcon_dlp_state_mode=ignore' to apply changes
+          {% else %}
+          NO DRIFT - CrowdStrike DLP configuration matches defined state
+          {% endif %}
+
+    - name: Fail if drift detected and strict mode enabled
+      ansible.builtin.fail:
+        msg: "Drift detected. Set falcon_dlp_strict_mode=false to allow drift."
+      when:
+        - _has_drift
+        - falcon_dlp_strict_mode | default(false) | bool

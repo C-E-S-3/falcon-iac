@@ -1,0 +1,80 @@
+---
+# CrowdStrike Falcon DLP Role - Internal Variables
+# These are not meant to be overridden by users
+
+# Cloud region to base URL mapping
+_falcon_cloud_urls:
+  us-1: "https://api.crowdstrike.com"
+  us-2: "https://api.us-2.crowdstrike.com"
+  eu-1: "https://api.eu-1.crowdstrike.com"
+  us-gov-1: "https://api.laggar.gcw.crowdstrike.com"
+  us-gov-2: "https://api.us-gov-2.crowdstrike.mil"
+
+# Computed base URL from cloud region
+falcon_base_url: "{{ _falcon_cloud_urls[falcon_cloud] }}"
+
+# API endpoint paths
+_falcon_endpoints:
+  # Authentication
+  oauth2_token: "/oauth2/token"
+
+  # Classifications
+  classifications_query: "/data-protection/queries/classifications/v2"
+  classifications_entities: "/data-protection/entities/classifications/v2"
+
+  # Policies
+  policies_query: "/data-protection/queries/policies/v2"
+  policies_entities: "/data-protection/entities/policies/v2"
+  policy_precedence: "/data-protection/entities/data-protection-precedence/v1"
+
+  # Content Patterns
+  content_patterns_query: "/data-protection/queries/content-patterns/v2"
+  content_patterns_entities: "/data-protection/entities/content-patterns/v1"
+
+  # Sensitivity Labels
+  sensitivity_labels_query: "/data-protection/queries/labels/v2"
+  sensitivity_labels_entities: "/data-protection/entities/labels/v2"
+
+  # Web Locations
+  web_locations_query: "/data-protection/queries/web-locations/v2"
+  web_locations_entities: "/data-protection/entities/web-locations/v2"
+
+  # Cloud Applications
+  cloud_applications_query: "/data-protection/queries/cloud-applications/v2"
+  cloud_applications_entities: "/data-protection/entities/cloud-applications/v1"
+
+  # Local Applications
+  local_applications_query: "/data-protection/queries/local-applications/v1"
+  local_applications_entities: "/data-protection/entities/local-applications/v1"
+
+  # Local Application Groups
+  local_application_groups_query: "/data-protection/queries/local-application-groups/v1"
+  local_application_groups_entities: "/data-protection/entities/local-application-groups/v1"
+
+  # Enterprise Accounts
+  enterprise_accounts_query: "/data-protection/queries/enterprise-accounts/v2"
+  enterprise_accounts_entities: "/data-protection/entities/enterprise-accounts/v1"
+
+  # File Types (read-only)
+  file_types_query: "/data-protection/queries/file-types/v2"
+  file_types_entities: "/data-protection/entities/file-types/v1"
+
+# Common HTTP headers template
+_falcon_auth_headers:
+  Authorization: "Bearer {{ falcon_bearer_token }}"
+  Content-Type: "application/json"
+
+# State mode to allowed actions mapping
+_falcon_state_actions:
+  report:
+    create: false
+    update: false
+    delete: false
+  ignore:
+    create: true
+    update: true
+    delete: false
+  delete:
+    create: true
+    update: true
+    delete: true

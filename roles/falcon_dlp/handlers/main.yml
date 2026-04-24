@@ -1,0 +1,3 @@
+---
+# Handlers for CrowdStrike Falcon DLP Role
+# Currently no handlers are needed as all API calls are immediate

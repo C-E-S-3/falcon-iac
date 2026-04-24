@@ -1,0 +1,53 @@
+---
+# DLP Policies - Endpoint Protection
+# Policies that apply to endpoint data exfiltration prevention
+
+falcon_dlp_policies:
+  - name: "PII Protection - Windows"
+    description: "Prevent PII exfiltration from Windows endpoints"
+    enabled: true
+    platform: "win"
+    classifications:
+      - "PII - Social Security Numbers"
+      - "PII - Credit Card Numbers"
+      - "PII - Contact Information"
+    host_groups: []  # Empty = all hosts, or specify group names/IDs
+
+  - name: "PII Protection - macOS"
+    description: "Prevent PII exfiltration from macOS endpoints"
+    enabled: true
+    platform: "mac"
+    classifications:
+      - "PII - Social Security Numbers"
+      - "PII - Credit Card Numbers"
+      - "PII - Contact Information"
+    host_groups: []
+
+  - name: "Compliance Protection - Windows"
+    description: "Prevent compliance data exfiltration from Windows endpoints"
+    enabled: true
+    platform: "win"
+    classifications:
+      - "HIPAA - Protected Health Information"
+      - "Financial - Banking Information"
+      - "Credentials - API Keys and Secrets"
+    host_groups: []
+
+  - name: "Compliance Protection - macOS"
+    description: "Prevent compliance data exfiltration from macOS endpoints"
+    enabled: true
+    platform: "mac"
+    classifications:
+      - "HIPAA - Protected Health Information"
+      - "Financial - Banking Information"
+      - "Credentials - API Keys and Secrets"
+    host_groups: []
+
+# Policy Precedence - order matters, first match wins
+falcon_dlp_policy_precedence:
+  win:
+    - "Compliance Protection - Windows"  # Check compliance first
+    - "PII Protection - Windows"
+  mac:
+    - "Compliance Protection - macOS"
+    - "PII Protection - macOS"

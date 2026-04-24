@@ -1,0 +1,72 @@
+---
+# Web Locations - Common Data Exfiltration Destinations
+# Define web locations for DLP rules
+
+falcon_dlp_web_locations:
+  - name: "Personal Email Services"
+    description: "Personal email providers commonly used for data exfiltration"
+    urls:
+      - fqdn: "mail.google.com"
+        path: "/*"
+      - fqdn: "outlook.live.com"
+        path: "/*"
+      - fqdn: "mail.yahoo.com"
+        path: "/*"
+      - fqdn: "protonmail.com"
+        path: "/*"
+      - fqdn: "mail.proton.me"
+        path: "/*"
+
+  - name: "Consumer Cloud Storage"
+    description: "Personal cloud storage services"
+    urls:
+      - fqdn: "dropbox.com"
+        path: "/*"
+      - fqdn: "drive.google.com"
+        path: "/*"
+      - fqdn: "onedrive.live.com"
+        path: "/*"
+      - fqdn: "icloud.com"
+        path: "/*"
+      - fqdn: "box.com"
+        path: "/*"
+      - fqdn: "mega.nz"
+        path: "/*"
+
+  - name: "Code Repositories"
+    description: "Public code hosting platforms"
+    urls:
+      - fqdn: "github.com"
+        path: "/*"
+      - fqdn: "gitlab.com"
+        path: "/*"
+      - fqdn: "bitbucket.org"
+        path: "/*"
+      - fqdn: "gist.github.com"
+        path: "/*"
+      - fqdn: "pastebin.com"
+        path: "/*"
+
+  - name: "File Sharing Services"
+    description: "File sharing and transfer services"
+    urls:
+      - fqdn: "wetransfer.com"
+        path: "/*"
+      - fqdn: "sendspace.com"
+        path: "/*"
+      - fqdn: "filebin.net"
+        path: "/*"
+      - fqdn: "transfer.sh"
+        path: "/*"
+
+  - name: "AI Services"
+    description: "AI and LLM services that may receive sensitive data"
+    urls:
+      - fqdn: "chat.openai.com"
+        path: "/*"
+      - fqdn: "claude.ai"
+        path: "/*"
+      - fqdn: "bard.google.com"
+        path: "/*"
+      - fqdn: "copilot.microsoft.com"
+        path: "/*"

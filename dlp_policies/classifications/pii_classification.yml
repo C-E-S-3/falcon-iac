@@ -1,0 +1,54 @@
+---
+# Classifications - PII Data
+# Group content patterns into logical classifications
+
+falcon_dlp_classifications:
+  - name: "PII - Social Security Numbers"
+    description: "Detects documents containing US Social Security Numbers"
+    enabled: true
+    content_patterns:
+      - "SSN - Standard Format"
+      - "SSN - No Dashes"
+    file_types:
+      - "pdf"
+      - "docx"
+      - "xlsx"
+      - "txt"
+      - "csv"
+    rules:
+      - detection_severity: "critical"
+        response_action: "block"
+        trigger_detection: true
+
+  - name: "PII - Credit Card Numbers"
+    description: "Detects documents containing credit card numbers"
+    enabled: true
+    content_patterns:
+      - "Credit Card - Visa"
+      - "Credit Card - Mastercard"
+      - "Credit Card - Amex"
+    file_types:
+      - "pdf"
+      - "docx"
+      - "xlsx"
+      - "txt"
+      - "csv"
+    rules:
+      - detection_severity: "critical"
+        response_action: "block"
+        trigger_detection: true
+
+  - name: "PII - Contact Information"
+    description: "Detects bulk contact information (emails, phone numbers)"
+    enabled: true
+    content_patterns:
+      - "Email Address Pattern"
+      - "US Phone Number"
+    file_types:
+      - "csv"
+      - "xlsx"
+      - "txt"
+    rules:
+      - detection_severity: "high"
+        response_action: "monitor"
+        trigger_detection: true

@@ -1,0 +1,256 @@
+---
+# Load DLP policy definitions from YAML files
+
+- name: Find all classification definition files
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/{{ falcon_dlp_policies_dir }}/classifications"
+    patterns: "*.yml,*.yaml"
+    recurse: true
+  register: _classification_files
+  delegate_to: localhost
+
+- name: Find all policy definition files
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/{{ falcon_dlp_policies_dir }}/policies"
+    patterns: "*.yml,*.yaml"
+    recurse: true
+  register: _policy_files
+  delegate_to: localhost
+
+- name: Find all content pattern definition files
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/{{ falcon_dlp_policies_dir }}/content_patterns"
+    patterns: "*.yml,*.yaml"
+    recurse: true
+  register: _content_pattern_files
+  delegate_to: localhost
+
+- name: Find all sensitivity label definition files
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/{{ falcon_dlp_policies_dir }}/sensitivity_labels"
+    patterns: "*.yml,*.yaml"
+    recurse: true
+  register: _sensitivity_label_files
+  delegate_to: localhost
+
+- name: Find all web location definition files
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/{{ falcon_dlp_policies_dir }}/web_locations"
+    patterns: "*.yml,*.yaml"
+    recurse: true
+  register: _web_location_files
+  delegate_to: localhost
+
+- name: Find all cloud application definition files
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/{{ falcon_dlp_policies_dir }}/cloud_applications"
+    patterns: "*.yml,*.yaml"
+    recurse: true
+  register: _cloud_application_files
+  delegate_to: localhost
+
+- name: Find all local application definition files
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/{{ falcon_dlp_policies_dir }}/local_applications"
+    patterns: "*.yml,*.yaml"
+    recurse: true
+  register: _local_application_files
+  delegate_to: localhost
+
+- name: Find all local application group definition files
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/{{ falcon_dlp_policies_dir }}/local_application_groups"
+    patterns: "*.yml,*.yaml"
+    recurse: true
+  register: _local_application_group_files
+  delegate_to: localhost
+
+- name: Find all enterprise account definition files
+  ansible.builtin.find:
+    paths: "{{ playbook_dir }}/{{ falcon_dlp_policies_dir }}/enterprise_accounts"
+    patterns: "*.yml,*.yaml"
+    recurse: true
+  register: _enterprise_account_files
+  delegate_to: localhost
+
+# Load and merge all definitions
+- name: Load classification definitions
+  ansible.builtin.include_vars:
+    file: "{{ item.path }}"
+    name: "_class_{{ item.path | hash('md5') }}"
+  loop: "{{ _classification_files.files }}"
+  when: _classification_files.files | length > 0
+
+- name: Merge classification definitions
+  ansible.builtin.set_fact:
+    falcon_dlp_classifications: >-
+      {{
+        falcon_dlp_classifications | default([]) +
+        (lookup('vars', '_class_' + item.path | hash('md5'), default={}).falcon_dlp_classifications | default([]))
+      }}
+  loop: "{{ _classification_files.files }}"
+  when: _classification_files.files | length > 0
+
+- name: Load policy definitions
+  ansible.builtin.include_vars:
+    file: "{{ item.path }}"
+    name: "_pol_{{ item.path | hash('md5') }}"
+  loop: "{{ _policy_files.files }}"
+  when: _policy_files.files | length > 0
+
+- name: Merge policy definitions
+  ansible.builtin.set_fact:
+    falcon_dlp_policies: >-
+      {{
+        falcon_dlp_policies | default([]) +
+        (lookup('vars', '_pol_' + item.path | hash('md5'), default={}).falcon_dlp_policies | default([]))
+      }}
+  loop: "{{ _policy_files.files }}"
+  when: _policy_files.files | length > 0
+
+- name: Load content pattern definitions
+  ansible.builtin.include_vars:
+    file: "{{ item.path }}"
+    name: "_pat_{{ item.path | hash('md5') }}"
+  loop: "{{ _content_pattern_files.files }}"
+  when: _content_pattern_files.files | length > 0
+
+- name: Merge content pattern definitions
+  ansible.builtin.set_fact:
+    falcon_dlp_content_patterns: >-
+      {{
+        falcon_dlp_content_patterns | default([]) +
+        (lookup('vars', '_pat_' + item.path | hash('md5'), default={}).falcon_dlp_content_patterns | default([]))
+      }}
+  loop: "{{ _content_pattern_files.files }}"
+  when: _content_pattern_files.files | length > 0
+
+- name: Load sensitivity label definitions
+  ansible.builtin.include_vars:
+    file: "{{ item.path }}"
+    name: "_lbl_{{ item.path | hash('md5') }}"
+  loop: "{{ _sensitivity_label_files.files }}"
+  when: _sensitivity_label_files.files | length > 0
+
+- name: Merge sensitivity label definitions
+  ansible.builtin.set_fact:
+    falcon_dlp_sensitivity_labels: >-
+      {{
+        falcon_dlp_sensitivity_labels | default([]) +
+        (lookup('vars', '_lbl_' + item.path | hash('md5'), default={}).falcon_dlp_sensitivity_labels | default([]))
+      }}
+  loop: "{{ _sensitivity_label_files.files }}"
+  when: _sensitivity_label_files.files | length > 0
+
+- name: Load web location definitions
+  ansible.builtin.include_vars:
+    file: "{{ item.path }}"
+    name: "_web_{{ item.path | hash('md5') }}"
+  loop: "{{ _web_location_files.files }}"
+  when: _web_location_files.files | length > 0
+
+- name: Merge web location definitions
+  ansible.builtin.set_fact:
+    falcon_dlp_web_locations: >-
+      {{
+        falcon_dlp_web_locations | default([]) +
+        (lookup('vars', '_web_' + item.path | hash('md5'), default={}).falcon_dlp_web_locations | default([]))
+      }}
+  loop: "{{ _web_location_files.files }}"
+  when: _web_location_files.files | length > 0
+
+- name: Load cloud application definitions
+  ansible.builtin.include_vars:
+    file: "{{ item.path }}"
+    name: "_capp_{{ item.path | hash('md5') }}"
+  loop: "{{ _cloud_application_files.files }}"
+  when: _cloud_application_files.files | length > 0
+
+- name: Merge cloud application definitions
+  ansible.builtin.set_fact:
+    falcon_dlp_cloud_applications: >-
+      {{
+        falcon_dlp_cloud_applications | default([]) +
+        (lookup('vars', '_capp_' + item.path | hash('md5'), default={}).falcon_dlp_cloud_applications | default([]))
+      }}
+  loop: "{{ _cloud_application_files.files }}"
+  when: _cloud_application_files.files | length > 0
+
+- name: Load local application definitions
+  ansible.builtin.include_vars:
+    file: "{{ item.path }}"
+    name: "_lapp_{{ item.path | hash('md5') }}"
+  loop: "{{ _local_application_files.files }}"
+  when: _local_application_files.files | length > 0
+
+- name: Merge local application definitions
+  ansible.builtin.set_fact:
+    falcon_dlp_local_applications: >-
+      {{
+        falcon_dlp_local_applications | default([]) +
+        (lookup('vars', '_lapp_' + item.path | hash('md5'), default={}).falcon_dlp_local_applications | default([]))
+      }}
+  loop: "{{ _local_application_files.files }}"
+  when: _local_application_files.files | length > 0
+
+- name: Load local application group definitions
+  ansible.builtin.include_vars:
+    file: "{{ item.path }}"
+    name: "_lag_{{ item.path | hash('md5') }}"
+  loop: "{{ _local_application_group_files.files }}"
+  when: _local_application_group_files.files | length > 0
+
+- name: Merge local application group definitions
+  ansible.builtin.set_fact:
+    falcon_dlp_local_application_groups: >-
+      {{
+        falcon_dlp_local_application_groups | default([]) +
+        (lookup('vars', '_lag_' + item.path | hash('md5'), default={}).falcon_dlp_local_application_groups | default([]))
+      }}
+  loop: "{{ _local_application_group_files.files }}"
+  when: _local_application_group_files.files | length > 0
+
+- name: Load enterprise account definitions
+  ansible.builtin.include_vars:
+    file: "{{ item.path }}"
+    name: "_ent_{{ item.path | hash('md5') }}"
+  loop: "{{ _enterprise_account_files.files }}"
+  when: _enterprise_account_files.files | length > 0
+
+- name: Merge enterprise account definitions
+  ansible.builtin.set_fact:
+    falcon_dlp_enterprise_accounts: >-
+      {{
+        falcon_dlp_enterprise_accounts | default([]) +
+        (lookup('vars', '_ent_' + item.path | hash('md5'), default={}).falcon_dlp_enterprise_accounts | default([]))
+      }}
+  loop: "{{ _enterprise_account_files.files }}"
+  when: _enterprise_account_files.files | length > 0
+
+# Initialize empty lists if no files found
+- name: Initialize empty definition lists
+  ansible.builtin.set_fact:
+    falcon_dlp_classifications: "{{ falcon_dlp_classifications | default([]) }}"
+    falcon_dlp_policies: "{{ falcon_dlp_policies | default([]) }}"
+    falcon_dlp_content_patterns: "{{ falcon_dlp_content_patterns | default([]) }}"
+    falcon_dlp_sensitivity_labels: "{{ falcon_dlp_sensitivity_labels | default([]) }}"
+    falcon_dlp_web_locations: "{{ falcon_dlp_web_locations | default([]) }}"
+    falcon_dlp_cloud_applications: "{{ falcon_dlp_cloud_applications | default([]) }}"
+    falcon_dlp_local_applications: "{{ falcon_dlp_local_applications | default([]) }}"
+    falcon_dlp_local_application_groups: "{{ falcon_dlp_local_application_groups | default([]) }}"
+    falcon_dlp_enterprise_accounts: "{{ falcon_dlp_enterprise_accounts | default([]) }}"
+
+- name: Display loaded definitions summary
+  ansible.builtin.debug:
+    msg: |
+      Loaded DLP Definitions:
+        Classifications: {{ falcon_dlp_classifications | length }}
+        Policies: {{ falcon_dlp_policies | length }}
+        Content Patterns: {{ falcon_dlp_content_patterns | length }}
+        Sensitivity Labels: {{ falcon_dlp_sensitivity_labels | length }}
+        Web Locations: {{ falcon_dlp_web_locations | length }}
+        Cloud Applications: {{ falcon_dlp_cloud_applications | length }}
+        Local Applications: {{ falcon_dlp_local_applications | length }}
+        Local Application Groups: {{ falcon_dlp_local_application_groups | length }}
+        Enterprise Accounts: {{ falcon_dlp_enterprise_accounts | length }}
+  when: falcon_dlp_debug | bool

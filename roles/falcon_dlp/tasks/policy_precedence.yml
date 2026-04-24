@@ -1,0 +1,116 @@
+---
+# Manage CrowdStrike DLP Policy Precedence
+
+# Policy precedence is defined in the inventory or policy files
+# Format: falcon_dlp_policy_precedence:
+#   win:
+#     - "Policy Name 1"
+#     - "Policy Name 2"
+#   mac:
+#     - "Policy Name A"
+#     - "Policy Name B"
+
+- name: Check if policy precedence is defined
+  ansible.builtin.set_fact:
+    _precedence_defined: "{{ falcon_dlp_policy_precedence is defined and falcon_dlp_policy_precedence | length > 0 }}"
+
+- name: Skip policy precedence if not defined
+  ansible.builtin.debug:
+    msg: "No policy precedence defined, skipping"
+  when: not _precedence_defined
+
+# Process Windows policy precedence
+- name: Build Windows policy precedence order
+  ansible.builtin.set_fact:
+    _win_policy_ids: >-
+      {%- set result = [] -%}
+      {%- for pname in falcon_dlp_policy_precedence.win | default([]) -%}
+        {%- if pname in (_falcon_policies_by_name | default({})) -%}
+          {%- set _ = result.append(_falcon_policies_by_name[pname].id) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ result }}
+  when:
+    - _precedence_defined
+    - falcon_dlp_policy_precedence.win is defined
+
+- name: Update Windows policy precedence
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policy_precedence }}"
+    method: POST
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      platform: "win"
+      precedence: "{{ _win_policy_ids }}"
+  register: _win_precedence_result
+  when:
+    - _precedence_defined
+    - falcon_dlp_policy_precedence.win is defined
+    - _win_policy_ids | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].update | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _win_precedence_result is succeeded
+
+# Process macOS policy precedence
+- name: Build macOS policy precedence order
+  ansible.builtin.set_fact:
+    _mac_policy_ids: >-
+      {%- set result = [] -%}
+      {%- for pname in falcon_dlp_policy_precedence.mac | default([]) -%}
+        {%- if pname in (_falcon_policies_by_name | default({})) -%}
+          {%- set _ = result.append(_falcon_policies_by_name[pname].id) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ result }}
+  when:
+    - _precedence_defined
+    - falcon_dlp_policy_precedence.mac is defined
+
+- name: Update macOS policy precedence
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policy_precedence }}"
+    method: POST
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      platform: "mac"
+      precedence: "{{ _mac_policy_ids }}"
+  register: _mac_precedence_result
+  when:
+    - _precedence_defined
+    - falcon_dlp_policy_precedence.mac is defined
+    - _mac_policy_ids | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].update | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _mac_precedence_result is succeeded
+
+- name: Display policy precedence changes
+  ansible.builtin.debug:
+    msg: |
+      Policy Precedence Updates:
+        Windows: {{ falcon_dlp_policy_precedence.win | default([]) | join(' > ') or 'Not configured' }}
+        macOS: {{ falcon_dlp_policy_precedence.mac | default([]) | join(' > ') or 'Not configured' }}
+        State Mode: {{ falcon_dlp_state_mode }}
+  when: _precedence_defined
+
+- name: Record policy precedence changes
+  ansible.builtin.set_fact:
+    _falcon_dlp_changes: >-
+      {{
+        _falcon_dlp_changes | default({}) | combine({
+          'policy_precedence': {
+            'win_updated': (_win_precedence_result is defined and _win_precedence_result.changed | default(false)),
+            'mac_updated': (_mac_precedence_result is defined and _mac_precedence_result.changed | default(false)),
+            'would_update_win': (falcon_dlp_policy_precedence.win | default([]) | length > 0) if not _falcon_state_actions[falcon_dlp_state_mode].update else false,
+            'would_update_mac': (falcon_dlp_policy_precedence.mac | default([]) | length > 0) if not _falcon_state_actions[falcon_dlp_state_mode].update else false
+          }
+        })
+      }}
+  when: _precedence_defined

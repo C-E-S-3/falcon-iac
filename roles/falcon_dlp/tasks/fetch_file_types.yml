@@ -1,0 +1,56 @@
+---
+# Fetch file types reference data (read-only)
+# File types are predefined by CrowdStrike and cannot be modified
+
+- name: Query available file types
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.file_types_query }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+  register: _file_types_query
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _file_types_query is succeeded
+
+- name: Fetch file type details
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.file_types_entities }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids: "{{ _file_types_query.json.resources }}"
+  register: _file_types_response
+  when: _file_types_query.json.resources | length > 0
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _file_types_response is succeeded
+
+- name: Build file types lookup maps
+  ansible.builtin.set_fact:
+    _falcon_file_types: "{{ _file_types_response.json.resources | default([]) }}"
+    _falcon_file_types_by_name: >-
+      {{
+        dict(
+          _file_types_response.json.resources | default([]) |
+          map(attribute='name') |
+          zip(_file_types_response.json.resources | default([]))
+        )
+      }}
+    _falcon_file_types_by_id: >-
+      {{
+        dict(
+          _file_types_response.json.resources | default([]) |
+          map(attribute='id') |
+          zip(_file_types_response.json.resources | default([]))
+        )
+      }}
+
+- name: Display available file types
+  ansible.builtin.debug:
+    msg: "Available file types: {{ _falcon_file_types | map(attribute='name') | list | join(', ') }}"
+  when: falcon_dlp_debug | bool

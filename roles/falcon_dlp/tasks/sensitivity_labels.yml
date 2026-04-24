@@ -1,0 +1,170 @@
+---
+# Manage CrowdStrike DLP Sensitivity Labels
+
+- name: Query existing sensitivity labels
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_query }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+  register: _sensitivity_labels_query
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _sensitivity_labels_query is succeeded
+
+- name: Fetch existing sensitivity label details
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_entities }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids: "{{ _sensitivity_labels_query.json.resources }}"
+  register: _existing_sensitivity_labels
+  when: _sensitivity_labels_query.json.resources | length > 0
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _existing_sensitivity_labels is succeeded
+
+- name: Build existing sensitivity labels lookup
+  ansible.builtin.set_fact:
+    _existing_labels_list: "{{ _existing_sensitivity_labels.json.resources | default([]) }}"
+    _existing_labels_by_name: >-
+      {{
+        dict(
+          (_existing_sensitivity_labels.json.resources | default([])) |
+          map(attribute='name') |
+          zip(_existing_sensitivity_labels.json.resources | default([]))
+        )
+      }}
+
+- name: Determine sensitivity labels to create
+  ansible.builtin.set_fact:
+    _labels_to_create: >-
+      {{
+        falcon_dlp_sensitivity_labels |
+        selectattr('name', 'defined') |
+        rejectattr('name', 'in', _existing_labels_by_name.keys() | list) |
+        list
+      }}
+
+- name: Determine sensitivity labels to delete
+  ansible.builtin.set_fact:
+    _labels_to_delete: >-
+      {{
+        _existing_labels_list |
+        rejectattr('name', 'in', falcon_dlp_sensitivity_labels | map(attribute='name') | list) |
+        rejectattr('system_defined', 'equalto', true) |
+        list
+      }}
+
+- name: Display sensitivity label changes summary
+  ansible.builtin.debug:
+    msg: |
+      Sensitivity Label Changes:
+        To Create: {{ _labels_to_create | map(attribute='name') | list | join(', ') or 'None' }}
+        To Delete: {{ _labels_to_delete | map(attribute='name') | list | join(', ') or 'None' }}
+        State Mode: {{ falcon_dlp_state_mode }}
+
+- name: Create new sensitivity labels
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_entities }}"
+    method: POST
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200, 201]
+    body_format: json
+    body:
+      resources:
+        - name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          source: "{{ item.source | default('custom') }}"
+  loop: "{{ _labels_to_create }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _create_labels_result
+  when:
+    - _labels_to_create | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].create | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _create_labels_result is succeeded
+
+- name: Delete orphaned sensitivity labels
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_entities }}"
+    method: DELETE
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids:
+        - "{{ item.id }}"
+  loop: "{{ _labels_to_delete }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _delete_labels_result
+  when:
+    - _labels_to_delete | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].delete | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _delete_labels_result is succeeded
+
+# Refresh sensitivity labels lookup
+- name: Re-query sensitivity labels after changes
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_query }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+  register: _labels_query_refresh
+  when: >
+    (_labels_to_create | length > 0 and _falcon_state_actions[falcon_dlp_state_mode].create) or
+    (_labels_to_delete | length > 0 and _falcon_state_actions[falcon_dlp_state_mode].delete)
+
+- name: Fetch refreshed sensitivity label details
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_entities }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids: "{{ _labels_query_refresh.json.resources }}"
+  register: _refreshed_labels
+  when:
+    - _labels_query_refresh is defined
+    - _labels_query_refresh.json.resources | default([]) | length > 0
+
+- name: Update sensitivity labels lookup maps
+  ansible.builtin.set_fact:
+    _falcon_sensitivity_labels: "{{ _refreshed_labels.json.resources | default(_existing_labels_list) }}"
+    _falcon_sensitivity_labels_by_name: >-
+      {{
+        dict(
+          (_refreshed_labels.json.resources | default(_existing_labels_list)) |
+          map(attribute='name') |
+          zip(_refreshed_labels.json.resources | default(_existing_labels_list))
+        )
+      }}
+
+- name: Record sensitivity label changes
+  ansible.builtin.set_fact:
+    _falcon_dlp_changes: >-
+      {{
+        _falcon_dlp_changes | default({}) | combine({
+          'sensitivity_labels': {
+            'created': (_create_labels_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].create else [],
+            'deleted': (_delete_labels_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].delete else [],
+            'would_create': _labels_to_create | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].create else [],
+            'would_delete': _labels_to_delete | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].delete else []
+          }
+        })
+      }}

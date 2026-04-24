@@ -1,0 +1,24 @@
+---
+# Sensitivity Labels - Microsoft Information Protection (MIP) Integration
+# Define sensitivity labels that map to Microsoft Information Protection labels
+
+falcon_dlp_sensitivity_labels:
+  - name: "Public"
+    description: "Information that can be freely shared publicly"
+    source: "mip"
+
+  - name: "Internal"
+    description: "Information for internal use only"
+    source: "mip"
+
+  - name: "Confidential"
+    description: "Sensitive business information"
+    source: "mip"
+
+  - name: "Highly Confidential"
+    description: "Most sensitive information requiring strict protection"
+    source: "mip"
+
+  - name: "Restricted"
+    description: "Information with regulatory or legal restrictions"
+    source: "mip"

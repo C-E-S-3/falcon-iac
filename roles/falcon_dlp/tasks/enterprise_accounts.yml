@@ -1,0 +1,170 @@
+---
+# Manage CrowdStrike DLP Enterprise Accounts
+
+- name: Query existing enterprise accounts
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.enterprise_accounts_query }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+  register: _enterprise_accounts_query
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _enterprise_accounts_query is succeeded
+
+- name: Fetch existing enterprise account details
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.enterprise_accounts_entities }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids: "{{ _enterprise_accounts_query.json.resources }}"
+  register: _existing_enterprise_accounts
+  when: _enterprise_accounts_query.json.resources | length > 0
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _existing_enterprise_accounts is succeeded
+
+- name: Build existing enterprise accounts lookup
+  ansible.builtin.set_fact:
+    _existing_enterprise_accounts_list: "{{ _existing_enterprise_accounts.json.resources | default([]) }}"
+    _existing_enterprise_accounts_by_name: >-
+      {{
+        dict(
+          (_existing_enterprise_accounts.json.resources | default([])) |
+          map(attribute='name') |
+          zip(_existing_enterprise_accounts.json.resources | default([]))
+        )
+      }}
+
+- name: Determine enterprise accounts to create
+  ansible.builtin.set_fact:
+    _enterprise_accounts_to_create: >-
+      {{
+        falcon_dlp_enterprise_accounts |
+        selectattr('name', 'defined') |
+        rejectattr('name', 'in', _existing_enterprise_accounts_by_name.keys() | list) |
+        list
+      }}
+
+- name: Determine enterprise accounts to update
+  ansible.builtin.set_fact:
+    _enterprise_accounts_to_update: >-
+      {{
+        falcon_dlp_enterprise_accounts |
+        selectattr('name', 'defined') |
+        selectattr('name', 'in', _existing_enterprise_accounts_by_name.keys() | list) |
+        list
+      }}
+
+- name: Determine enterprise accounts to delete
+  ansible.builtin.set_fact:
+    _enterprise_accounts_to_delete: >-
+      {{
+        _existing_enterprise_accounts_list |
+        rejectattr('name', 'in', falcon_dlp_enterprise_accounts | map(attribute='name') | list) |
+        rejectattr('system_defined', 'equalto', true) |
+        list
+      }}
+
+- name: Display enterprise account changes summary
+  ansible.builtin.debug:
+    msg: |
+      Enterprise Account Changes:
+        To Create: {{ _enterprise_accounts_to_create | map(attribute='name') | list | join(', ') or 'None' }}
+        To Update: {{ _enterprise_accounts_to_update | map(attribute='name') | list | join(', ') or 'None' }}
+        To Delete: {{ _enterprise_accounts_to_delete | map(attribute='name') | list | join(', ') or 'None' }}
+        State Mode: {{ falcon_dlp_state_mode }}
+
+- name: Create new enterprise accounts
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.enterprise_accounts_entities }}"
+    method: POST
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200, 201]
+    body_format: json
+    body:
+      resources:
+        - name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          account_type: "{{ item.account_type | default('') }}"
+          domains: "{{ item.domains | default([]) }}"
+  loop: "{{ _enterprise_accounts_to_create }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _create_enterprise_accounts_result
+  when:
+    - _enterprise_accounts_to_create | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].create | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _create_enterprise_accounts_result is succeeded
+
+- name: Update existing enterprise accounts
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.enterprise_accounts_entities }}"
+    method: PATCH
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      resources:
+        - id: "{{ _existing_enterprise_accounts_by_name[item.name].id }}"
+          name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          account_type: "{{ item.account_type | default('') }}"
+          domains: "{{ item.domains | default([]) }}"
+  loop: "{{ _enterprise_accounts_to_update }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _update_enterprise_accounts_result
+  when:
+    - _enterprise_accounts_to_update | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].update | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _update_enterprise_accounts_result is succeeded
+
+- name: Delete orphaned enterprise accounts
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.enterprise_accounts_entities }}"
+    method: DELETE
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids:
+        - "{{ item.id }}"
+  loop: "{{ _enterprise_accounts_to_delete }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _delete_enterprise_accounts_result
+  when:
+    - _enterprise_accounts_to_delete | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].delete | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _delete_enterprise_accounts_result is succeeded
+
+- name: Record enterprise account changes
+  ansible.builtin.set_fact:
+    _falcon_dlp_changes: >-
+      {{
+        _falcon_dlp_changes | default({}) | combine({
+          'enterprise_accounts': {
+            'created': (_create_enterprise_accounts_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].create else [],
+            'updated': (_update_enterprise_accounts_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].update else [],
+            'deleted': (_delete_enterprise_accounts_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].delete else [],
+            'would_create': _enterprise_accounts_to_create | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].create else [],
+            'would_update': _enterprise_accounts_to_update | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].update else [],
+            'would_delete': _enterprise_accounts_to_delete | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].delete else []
+          }
+        })
+      }}

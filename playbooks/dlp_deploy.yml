@@ -1,0 +1,65 @@
+---
+# Deploy CrowdStrike Falcon DLP Configuration
+#
+# Usage:
+#   # Report mode (default) - show what would change
+#   ansible-playbook playbooks/dlp_deploy.yml -i inventories/dev/hosts.yml
+#
+#   # Additive mode - create/update only, never delete
+#   ansible-playbook playbooks/dlp_deploy.yml -i inventories/dev/hosts.yml -e falcon_dlp_state_mode=ignore
+#
+#   # Full IaC mode - reconcile all resources (includes deletions)
+#   ansible-playbook playbooks/dlp_deploy.yml -i inventories/dev/hosts.yml -e falcon_dlp_state_mode=delete
+#
+#   # With debug output
+#   ansible-playbook playbooks/dlp_deploy.yml -i inventories/dev/hosts.yml -e falcon_dlp_debug=true
+
+- name: Deploy CrowdStrike Falcon DLP Configuration
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # Override state mode via command line: -e falcon_dlp_state_mode=ignore
+    # Default is 'report' (drift detection only)
+    falcon_dlp_state_mode: "{{ falcon_dlp_state_mode | default('report') }}"
+
+  pre_tasks:
+    - name: Display deployment configuration
+      ansible.builtin.debug:
+        msg: |
+          CrowdStrike Falcon DLP Deployment
+          ==================================
+          State Mode: {{ falcon_dlp_state_mode }}
+          Cloud: {{ falcon_cloud | default('us-1') }}
+          Policies Dir: {{ falcon_dlp_policies_dir | default('dlp_policies') }}
+
+    - name: Confirm destructive operation
+      ansible.builtin.pause:
+        prompt: |
+          WARNING: You are running in DELETE mode.
+          Resources not defined in your YAML files WILL BE DELETED from CrowdStrike.
+          Press Enter to continue or Ctrl+C to abort
+      when: falcon_dlp_state_mode == 'delete'
+
+  roles:
+    - role: falcon_dlp
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: |
+          DLP deployment complete.
+          Total changes: {{ falcon_dlp_report.summary.total_created | default(0) }} created,
+                         {{ falcon_dlp_report.summary.total_updated | default(0) }} updated,
+                         {{ falcon_dlp_report.summary.total_deleted | default(0) }} deleted
+      when: falcon_dlp_state_mode != 'report'
+
+    - name: Display report mode summary
+      ansible.builtin.debug:
+        msg: |
+          DLP report complete.
+          Potential changes: {{ falcon_dlp_report.summary.total_would_create | default(0) }} to create,
+                             {{ falcon_dlp_report.summary.total_would_update | default(0) }} to update,
+                             {{ falcon_dlp_report.summary.total_would_delete | default(0) }} to delete
+      when: falcon_dlp_state_mode == 'report'

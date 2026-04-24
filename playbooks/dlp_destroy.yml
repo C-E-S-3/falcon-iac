@@ -1,0 +1,165 @@
+---
+# Destroy ALL CrowdStrike Falcon DLP Configuration
+#
+# WARNING: This playbook will DELETE all custom DLP resources from CrowdStrike!
+# System-defined resources will not be deleted.
+#
+# Usage:
+#   # Dry run first (report mode)
+#   ansible-playbook playbooks/dlp_destroy.yml -i inventories/dev/hosts.yml
+#
+#   # Actually destroy (requires explicit confirmation)
+#   ansible-playbook playbooks/dlp_destroy.yml -i inventories/dev/hosts.yml -e falcon_dlp_confirm_destroy=true
+
+- name: Destroy CrowdStrike Falcon DLP Configuration
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  vars:
+    # Override all policy definitions to empty - this will mark everything for deletion
+    falcon_dlp_classifications: []
+    falcon_dlp_policies: []
+    falcon_dlp_content_patterns: []
+    falcon_dlp_sensitivity_labels: []
+    falcon_dlp_web_locations: []
+    falcon_dlp_cloud_applications: []
+    falcon_dlp_local_applications: []
+    falcon_dlp_local_application_groups: []
+    falcon_dlp_enterprise_accounts: []
+
+    # Default to report mode unless confirmed
+    falcon_dlp_state_mode: "{{ 'delete' if (falcon_dlp_confirm_destroy | default(false) | bool) else 'report' }}"
+
+  pre_tasks:
+    - name: Display destroy warning
+      ansible.builtin.debug:
+        msg: |
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+          WARNING: CrowdStrike Falcon DLP DESTROY Operation
+          !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+          This playbook will DELETE all custom DLP resources:
+          - Classifications
+          - Policies
+          - Content Patterns
+          - Sensitivity Labels
+          - Web Locations
+          - Cloud Applications
+          - Local Applications
+          - Local Application Groups
+          - Enterprise Accounts
+
+          System-defined resources will NOT be deleted.
+
+          Cloud: {{ falcon_cloud | default('us-1') }}
+          State Mode: {{ falcon_dlp_state_mode }}
+
+          {% if not (falcon_dlp_confirm_destroy | default(false) | bool) %}
+          Running in REPORT mode. To actually destroy, run with:
+          -e falcon_dlp_confirm_destroy=true
+          {% endif %}
+
+    - name: Require explicit confirmation for destroy
+      ansible.builtin.pause:
+        prompt: |
+          Type 'DESTROY' to confirm deletion of all DLP resources
+      register: _destroy_confirmation
+      when: falcon_dlp_confirm_destroy | default(false) | bool
+
+    - name: Validate confirmation
+      ansible.builtin.fail:
+        msg: "Destroy cancelled. You must type 'DESTROY' to confirm."
+      when:
+        - falcon_dlp_confirm_destroy | default(false) | bool
+        - _destroy_confirmation.user_input != 'DESTROY'
+
+  tasks:
+    # Skip loading definitions - we've already set empty lists
+    - name: Skip definition loading
+      ansible.builtin.set_fact:
+        _skip_load_definitions: true
+
+    # Authenticate
+    - name: Authenticate to CrowdStrike Falcon API
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: auth.yml
+
+    # Fetch file types (needed for internal operations)
+    - name: Fetch file types reference data
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: fetch_file_types.yml
+
+    # Process each resource type for deletion
+    - name: Process content patterns for deletion
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: content_patterns.yml
+      when: falcon_dlp_manage_content_patterns | default(true) | bool
+
+    - name: Process sensitivity labels for deletion
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: sensitivity_labels.yml
+      when: falcon_dlp_manage_sensitivity_labels | default(true) | bool
+
+    - name: Process web locations for deletion
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: web_locations.yml
+      when: falcon_dlp_manage_web_locations | default(true) | bool
+
+    - name: Process cloud applications for deletion
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: cloud_applications.yml
+      when: falcon_dlp_manage_cloud_applications | default(true) | bool
+
+    - name: Process local application groups for deletion
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: local_application_groups.yml
+      when: falcon_dlp_manage_local_application_groups | default(true) | bool
+
+    - name: Process local applications for deletion
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: local_applications.yml
+      when: falcon_dlp_manage_local_applications | default(true) | bool
+
+    - name: Process enterprise accounts for deletion
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: enterprise_accounts.yml
+      when: falcon_dlp_manage_enterprise_accounts | default(true) | bool
+
+    - name: Process classifications for deletion
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: classifications.yml
+      when: falcon_dlp_manage_classifications | default(true) | bool
+
+    - name: Process policies for deletion
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: policies.yml
+      when: falcon_dlp_manage_policies | default(true) | bool
+
+    # Generate report
+    - name: Generate summary report
+      ansible.builtin.include_role:
+        name: falcon_dlp
+        tasks_from: report.yml
+
+  post_tasks:
+    - name: Display completion message
+      ansible.builtin.debug:
+        msg: |
+          {% if falcon_dlp_state_mode == 'delete' %}
+          DLP resources have been destroyed.
+          {% else %}
+          DLP destroy report complete (no changes made).
+          Run with -e falcon_dlp_confirm_destroy=true to actually delete resources.
+          {% endif %}

@@ -1,0 +1,246 @@
+---
+# Manage CrowdStrike DLP Policies
+
+- name: Query existing policies
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_query }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+  register: _policies_query
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _policies_query is succeeded
+
+- name: Fetch existing policy details
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids: "{{ _policies_query.json.resources }}"
+  register: _existing_policies
+  when: _policies_query.json.resources | length > 0
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _existing_policies is succeeded
+
+- name: Build existing policies lookup
+  ansible.builtin.set_fact:
+    _existing_policies_list: "{{ _existing_policies.json.resources | default([]) }}"
+    _existing_policies_by_name: >-
+      {{
+        dict(
+          (_existing_policies.json.resources | default([])) |
+          map(attribute='name') |
+          zip(_existing_policies.json.resources | default([]))
+        )
+      }}
+
+# Resolve name references to IDs for policies
+- name: Build resolved policies with ID references
+  ansible.builtin.set_fact:
+    _resolved_policies: "{{ _resolved_policies_temp }}"
+  vars:
+    _resolved_policies_temp: >-
+      {%- set result = [] -%}
+      {%- for pol in falcon_dlp_policies -%}
+        {%- set classification_ids = [] -%}
+        {%- for cname in pol.classifications | default([]) -%}
+          {%- if cname in (_falcon_classifications_by_name | default({})) -%}
+            {%- set _ = classification_ids.append(_falcon_classifications_by_name[cname].id) -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- set resolved_pol = pol | combine({
+          'classification_ids': classification_ids
+        }) -%}
+        {%- set _ = result.append(resolved_pol) -%}
+      {%- endfor -%}
+      {{ result }}
+
+- name: Determine policies to create
+  ansible.builtin.set_fact:
+    _policies_to_create: >-
+      {{
+        _resolved_policies |
+        selectattr('name', 'defined') |
+        rejectattr('name', 'in', _existing_policies_by_name.keys() | list) |
+        list
+      }}
+
+- name: Determine policies to update
+  ansible.builtin.set_fact:
+    _policies_to_update: >-
+      {{
+        _resolved_policies |
+        selectattr('name', 'defined') |
+        selectattr('name', 'in', _existing_policies_by_name.keys() | list) |
+        list
+      }}
+
+- name: Determine policies to delete
+  ansible.builtin.set_fact:
+    _policies_to_delete: >-
+      {{
+        _existing_policies_list |
+        rejectattr('name', 'in', falcon_dlp_policies | map(attribute='name') | list) |
+        rejectattr('system_defined', 'equalto', true) |
+        list
+      }}
+
+- name: Display policy changes summary
+  ansible.builtin.debug:
+    msg: |
+      Policy Changes:
+        To Create: {{ _policies_to_create | map(attribute='name') | list | join(', ') or 'None' }}
+        To Update: {{ _policies_to_update | map(attribute='name') | list | join(', ') or 'None' }}
+        To Delete: {{ _policies_to_delete | map(attribute='name') | list | join(', ') or 'None' }}
+        State Mode: {{ falcon_dlp_state_mode }}
+
+# Create new policies
+- name: Create new policies
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}"
+    method: POST
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200, 201]
+    body_format: json
+    body:
+      resources:
+        - name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          enabled: "{{ item.enabled | default(true) }}"
+          platform: "{{ item.platform | default('win') }}"
+          classifications: "{{ item.classification_ids | default([]) }}"
+          host_groups: "{{ item.host_groups | default([]) }}"
+  loop: "{{ _policies_to_create }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _create_policies_result
+  when:
+    - _policies_to_create | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].create | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _create_policies_result is succeeded
+
+# Update existing policies
+- name: Update existing policies
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}"
+    method: PATCH
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      resources:
+        - id: "{{ _existing_policies_by_name[item.name].id }}"
+          name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          enabled: "{{ item.enabled | default(true) }}"
+          platform: "{{ item.platform | default('win') }}"
+          classifications: "{{ item.classification_ids | default([]) }}"
+          host_groups: "{{ item.host_groups | default([]) }}"
+  loop: "{{ _policies_to_update }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _update_policies_result
+  when:
+    - _policies_to_update | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].update | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _update_policies_result is succeeded
+
+# Delete orphaned policies
+- name: Delete orphaned policies
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}"
+    method: DELETE
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids:
+        - "{{ item.id }}"
+  loop: "{{ _policies_to_delete }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _delete_policies_result
+  when:
+    - _policies_to_delete | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].delete | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _delete_policies_result is succeeded
+
+# Refresh policies lookup after changes
+- name: Re-query policies after changes
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_query }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+  register: _policies_query_refresh
+  when: >
+    (_policies_to_create | length > 0 and _falcon_state_actions[falcon_dlp_state_mode].create) or
+    (_policies_to_delete | length > 0 and _falcon_state_actions[falcon_dlp_state_mode].delete)
+
+- name: Fetch refreshed policy details
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids: "{{ _policies_query_refresh.json.resources }}"
+  register: _refreshed_policies
+  when:
+    - _policies_query_refresh is defined
+    - _policies_query_refresh.json.resources | default([]) | length > 0
+
+- name: Update policies lookup maps
+  ansible.builtin.set_fact:
+    _falcon_policies: "{{ _refreshed_policies.json.resources | default(_existing_policies_list) }}"
+    _falcon_policies_by_name: >-
+      {{
+        dict(
+          (_refreshed_policies.json.resources | default(_existing_policies_list)) |
+          map(attribute='name') |
+          zip(_refreshed_policies.json.resources | default(_existing_policies_list))
+        )
+      }}
+    _falcon_policies_by_id: >-
+      {{
+        dict(
+          (_refreshed_policies.json.resources | default(_existing_policies_list)) |
+          map(attribute='id') |
+          zip(_refreshed_policies.json.resources | default(_existing_policies_list))
+        )
+      }}
+
+- name: Record policy changes
+  ansible.builtin.set_fact:
+    _falcon_dlp_changes: >-
+      {{
+        _falcon_dlp_changes | default({}) | combine({
+          'policies': {
+            'created': (_create_policies_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].create else [],
+            'updated': (_update_policies_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].update else [],
+            'deleted': (_delete_policies_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].delete else [],
+            'would_create': _policies_to_create | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].create else [],
+            'would_update': _policies_to_update | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].update else [],
+            'would_delete': _policies_to_delete | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].delete else []
+          }
+        })
+      }}

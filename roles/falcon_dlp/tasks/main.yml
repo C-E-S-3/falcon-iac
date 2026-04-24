@@ -1,0 +1,94 @@
+---
+# CrowdStrike Falcon DLP Role - Main Entry Point
+
+- name: Display role configuration
+  ansible.builtin.debug:
+    msg: |
+      Falcon DLP Configuration:
+        Cloud Region: {{ falcon_cloud }}
+        Base URL: {{ falcon_base_url }}
+        State Mode: {{ falcon_dlp_state_mode }}
+        Policies Dir: {{ falcon_dlp_policies_dir }}
+        {% if falcon_member_cid | default('') | length > 0 %}Member CID: {{ falcon_member_cid }}{% endif %}
+  when: falcon_dlp_debug | bool
+
+- name: Validate state mode
+  ansible.builtin.assert:
+    that:
+      - falcon_dlp_state_mode in ['report', 'ignore', 'delete']
+    fail_msg: "Invalid state mode '{{ falcon_dlp_state_mode }}'. Must be one of: report, ignore, delete"
+    quiet: true
+
+- name: Display state mode warning for delete mode
+  ansible.builtin.debug:
+    msg: |
+      WARNING: Running in 'delete' mode. Resources in CrowdStrike that are not
+      defined in your YAML files WILL BE DELETED. Ensure this is intentional.
+  when: falcon_dlp_state_mode == 'delete'
+
+# Authentication
+- name: Authenticate to CrowdStrike Falcon API
+  ansible.builtin.include_tasks: auth.yml
+
+# Load policy definitions from YAML files
+- name: Load DLP policy definitions
+  ansible.builtin.include_tasks: load_definitions.yml
+
+# Fetch reference data (file types are read-only)
+- name: Fetch file types reference data
+  ansible.builtin.include_tasks: fetch_file_types.yml
+
+# Process resources in dependency order
+# 1. Content Patterns (no dependencies)
+- name: Manage content patterns
+  ansible.builtin.include_tasks: content_patterns.yml
+  when: falcon_dlp_manage_content_patterns | bool
+
+# 2. Sensitivity Labels (no dependencies)
+- name: Manage sensitivity labels
+  ansible.builtin.include_tasks: sensitivity_labels.yml
+  when: falcon_dlp_manage_sensitivity_labels | bool
+
+# 3. Web Locations (no dependencies)
+- name: Manage web locations
+  ansible.builtin.include_tasks: web_locations.yml
+  when: falcon_dlp_manage_web_locations | bool
+
+# 4. Cloud Applications (no dependencies)
+- name: Manage cloud applications
+  ansible.builtin.include_tasks: cloud_applications.yml
+  when: falcon_dlp_manage_cloud_applications | bool
+
+# 5. Local Applications (no dependencies)
+- name: Manage local applications
+  ansible.builtin.include_tasks: local_applications.yml
+  when: falcon_dlp_manage_local_applications | bool
+
+# 6. Local Application Groups (depends on local applications)
+- name: Manage local application groups
+  ansible.builtin.include_tasks: local_application_groups.yml
+  when: falcon_dlp_manage_local_application_groups | bool
+
+# 7. Enterprise Accounts (no dependencies)
+- name: Manage enterprise accounts
+  ansible.builtin.include_tasks: enterprise_accounts.yml
+  when: falcon_dlp_manage_enterprise_accounts | bool
+
+# 8. Classifications (depends on content patterns, file types, web locations, labels)
+- name: Manage classifications
+  ansible.builtin.include_tasks: classifications.yml
+  when: falcon_dlp_manage_classifications | bool
+
+# 9. Policies (depends on classifications, host groups)
+- name: Manage policies
+  ansible.builtin.include_tasks: policies.yml
+  when: falcon_dlp_manage_policies | bool
+
+# 10. Policy Precedence (depends on policies)
+- name: Manage policy precedence
+  ansible.builtin.include_tasks: policy_precedence.yml
+  when: falcon_dlp_manage_policy_precedence | bool
+
+# Summary report
+- name: Generate summary report
+  ansible.builtin.include_tasks: report.yml

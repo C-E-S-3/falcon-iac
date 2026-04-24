@@ -1,0 +1,71 @@
+---
+# Content Patterns - PII Detection
+# These patterns are used to detect personally identifiable information
+
+falcon_dlp_content_patterns:
+  # Social Security Numbers
+  - name: "SSN - Standard Format"
+    description: "Detects US Social Security Numbers in XXX-XX-XXXX format"
+    category: "pii"
+    region: "us"
+    min_match_threshold: 1
+    regexes:
+      - '\b\d{3}-\d{2}-\d{4}\b'
+    example: "123-45-6789"
+
+  - name: "SSN - No Dashes"
+    description: "Detects US Social Security Numbers without dashes (9 consecutive digits)"
+    category: "pii"
+    region: "us"
+    min_match_threshold: 2  # Require 2 matches to reduce false positives
+    regexes:
+      - '\b\d{9}\b'
+    example: "123456789"
+
+  # Credit Card Numbers
+  - name: "Credit Card - Visa"
+    description: "Detects Visa credit card numbers"
+    category: "financial"
+    region: "global"
+    min_match_threshold: 1
+    regexes:
+      - '\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+    example: "4111-1111-1111-1111"
+
+  - name: "Credit Card - Mastercard"
+    description: "Detects Mastercard credit card numbers"
+    category: "financial"
+    region: "global"
+    min_match_threshold: 1
+    regexes:
+      - '\b5[1-5]\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b'
+    example: "5500-0000-0000-0004"
+
+  - name: "Credit Card - Amex"
+    description: "Detects American Express credit card numbers"
+    category: "financial"
+    region: "global"
+    min_match_threshold: 1
+    regexes:
+      - '\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b'
+    example: "3782-822463-10005"
+
+  # Email Addresses (for detecting bulk PII)
+  - name: "Email Address Pattern"
+    description: "Detects email addresses - useful for detecting contact lists"
+    category: "pii"
+    region: "global"
+    min_match_threshold: 10  # Only alert on bulk emails
+    regexes:
+      - '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
+    example: "user@example.com"
+
+  # Phone Numbers
+  - name: "US Phone Number"
+    description: "Detects US phone numbers in various formats"
+    category: "pii"
+    region: "us"
+    min_match_threshold: 5
+    regexes:
+      - '\b\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b'
+    example: "(555) 123-4567"

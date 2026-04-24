@@ -1,0 +1,56 @@
+---
+# OAuth2 Authentication for CrowdStrike Falcon API
+
+- name: Validate authentication credentials are provided
+  ansible.builtin.assert:
+    that:
+      - falcon_client_id is defined
+      - falcon_client_id | length > 0
+      - falcon_client_secret is defined
+      - falcon_client_secret | length > 0
+    fail_msg: >
+      CrowdStrike credentials not found. Please provide falcon_client_id and
+      falcon_client_secret via Ansible Vault or set FALCON_CLIENT_ID and
+      FALCON_CLIENT_SECRET environment variables.
+    quiet: true
+
+- name: Build OAuth2 token request body
+  ansible.builtin.set_fact:
+    _falcon_oauth_body: >-
+      {{
+        {
+          'client_id': falcon_client_id,
+          'client_secret': falcon_client_secret
+        } | combine(
+          {'member_cid': falcon_member_cid} if (falcon_member_cid | default('') | length > 0) else {}
+        )
+      }}
+  no_log: true
+
+- name: Obtain OAuth2 bearer token
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.oauth2_token }}"
+    method: POST
+    body_format: form-urlencoded
+    body: "{{ _falcon_oauth_body }}"
+    status_code: [201]
+    timeout: "{{ falcon_api_timeout }}"
+  register: _falcon_auth_response
+  no_log: true
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _falcon_auth_response is succeeded
+
+- name: Set bearer token fact
+  ansible.builtin.set_fact:
+    falcon_bearer_token: "{{ _falcon_auth_response.json.access_token }}"
+    falcon_token_expires_in: "{{ _falcon_auth_response.json.expires_in }}"
+  no_log: true
+
+- name: Display authentication status
+  ansible.builtin.debug:
+    msg: >
+      Successfully authenticated to CrowdStrike Falcon API
+      ({{ falcon_cloud }}{% if falcon_member_cid | default('') | length > 0 %}, member_cid: {{ falcon_member_cid }}{% endif %}).
+      Token expires in {{ falcon_token_expires_in }} seconds.
+  when: falcon_dlp_debug | bool

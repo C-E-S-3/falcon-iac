@@ -1,0 +1,208 @@
+---
+# Manage CrowdStrike DLP Web Locations
+
+- name: Query existing web locations
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.web_locations_query }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+  register: _web_locations_query
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _web_locations_query is succeeded
+
+- name: Fetch existing web location details
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.web_locations_entities }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids: "{{ _web_locations_query.json.resources }}"
+  register: _existing_web_locations
+  when: _web_locations_query.json.resources | length > 0
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _existing_web_locations is succeeded
+
+- name: Build existing web locations lookup
+  ansible.builtin.set_fact:
+    _existing_web_locations_list: "{{ _existing_web_locations.json.resources | default([]) }}"
+    _existing_web_locations_by_name: >-
+      {{
+        dict(
+          (_existing_web_locations.json.resources | default([])) |
+          map(attribute='name') |
+          zip(_existing_web_locations.json.resources | default([]))
+        )
+      }}
+
+- name: Determine web locations to create
+  ansible.builtin.set_fact:
+    _web_locations_to_create: >-
+      {{
+        falcon_dlp_web_locations |
+        selectattr('name', 'defined') |
+        rejectattr('name', 'in', _existing_web_locations_by_name.keys() | list) |
+        list
+      }}
+
+- name: Determine web locations to update
+  ansible.builtin.set_fact:
+    _web_locations_to_update: >-
+      {{
+        falcon_dlp_web_locations |
+        selectattr('name', 'defined') |
+        selectattr('name', 'in', _existing_web_locations_by_name.keys() | list) |
+        list
+      }}
+
+- name: Determine web locations to delete
+  ansible.builtin.set_fact:
+    _web_locations_to_delete: >-
+      {{
+        _existing_web_locations_list |
+        rejectattr('name', 'in', falcon_dlp_web_locations | map(attribute='name') | list) |
+        rejectattr('system_defined', 'equalto', true) |
+        list
+      }}
+
+- name: Display web location changes summary
+  ansible.builtin.debug:
+    msg: |
+      Web Location Changes:
+        To Create: {{ _web_locations_to_create | map(attribute='name') | list | join(', ') or 'None' }}
+        To Update: {{ _web_locations_to_update | map(attribute='name') | list | join(', ') or 'None' }}
+        To Delete: {{ _web_locations_to_delete | map(attribute='name') | list | join(', ') or 'None' }}
+        State Mode: {{ falcon_dlp_state_mode }}
+
+- name: Create new web locations
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.web_locations_entities }}"
+    method: POST
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200, 201]
+    body_format: json
+    body:
+      resources:
+        - name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          urls: "{{ item.urls | default([]) }}"
+  loop: "{{ _web_locations_to_create }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _create_web_locations_result
+  when:
+    - _web_locations_to_create | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].create | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _create_web_locations_result is succeeded
+
+- name: Update existing web locations
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.web_locations_entities }}"
+    method: PATCH
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      resources:
+        - id: "{{ _existing_web_locations_by_name[item.name].id }}"
+          name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          urls: "{{ item.urls | default([]) }}"
+  loop: "{{ _web_locations_to_update }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _update_web_locations_result
+  when:
+    - _web_locations_to_update | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].update | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _update_web_locations_result is succeeded
+
+- name: Delete orphaned web locations
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.web_locations_entities }}"
+    method: DELETE
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids:
+        - "{{ item.id }}"
+  loop: "{{ _web_locations_to_delete }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _delete_web_locations_result
+  when:
+    - _web_locations_to_delete | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].delete | bool
+  retries: "{{ falcon_api_retries }}"
+  delay: "{{ falcon_api_retry_delay }}"
+  until: _delete_web_locations_result is succeeded
+
+# Refresh web locations lookup
+- name: Re-query web locations after changes
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.web_locations_query }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+  register: _web_locations_query_refresh
+  when: >
+    (_web_locations_to_create | length > 0 and _falcon_state_actions[falcon_dlp_state_mode].create) or
+    (_web_locations_to_delete | length > 0 and _falcon_state_actions[falcon_dlp_state_mode].delete)
+
+- name: Fetch refreshed web location details
+  ansible.builtin.uri:
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.web_locations_entities }}"
+    method: GET
+    headers: "{{ _falcon_auth_headers }}"
+    timeout: "{{ falcon_api_timeout }}"
+    status_code: [200]
+    body_format: json
+    body:
+      ids: "{{ _web_locations_query_refresh.json.resources }}"
+  register: _refreshed_web_locations
+  when:
+    - _web_locations_query_refresh is defined
+    - _web_locations_query_refresh.json.resources | default([]) | length > 0
+
+- name: Update web locations lookup maps
+  ansible.builtin.set_fact:
+    _falcon_web_locations: "{{ _refreshed_web_locations.json.resources | default(_existing_web_locations_list) }}"
+    _falcon_web_locations_by_name: >-
+      {{
+        dict(
+          (_refreshed_web_locations.json.resources | default(_existing_web_locations_list)) |
+          map(attribute='name') |
+          zip(_refreshed_web_locations.json.resources | default(_existing_web_locations_list))
+        )
+      }}
+
+- name: Record web location changes
+  ansible.builtin.set_fact:
+    _falcon_dlp_changes: >-
+      {{
+        _falcon_dlp_changes | default({}) | combine({
+          'web_locations': {
+            'created': (_create_web_locations_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].create else [],
+            'updated': (_update_web_locations_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].update else [],
+            'deleted': (_delete_web_locations_result.results | default([]) | selectattr('changed', 'defined') | selectattr('changed') | map(attribute='item.name') | list) if _falcon_state_actions[falcon_dlp_state_mode].delete else [],
+            'would_create': _web_locations_to_create | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].create else [],
+            'would_update': _web_locations_to_update | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].update else [],
+            'would_delete': _web_locations_to_delete | map(attribute='name') | list if not _falcon_state_actions[falcon_dlp_state_mode].delete else []
+          }
+        })
+      }}

@@ -1,0 +1,34 @@
+---
+# CrowdStrike Falcon Configuration - Production Environment
+
+# Cloud region
+falcon_cloud: "us-1"
+
+# DLP policies directory (relative to playbook)
+falcon_dlp_policies_dir: "dlp_policies"
+
+# Default state mode for prod (report mode - require explicit override)
+falcon_dlp_state_mode: "report"
+
+# Disable debug output in prod
+falcon_dlp_debug: false
+
+# API settings (longer timeout for prod)
+falcon_api_timeout: 60
+falcon_api_retries: 5
+falcon_api_retry_delay: 10
+
+# Enable strict mode - fail if drift detected in CI/CD
+falcon_dlp_strict_mode: true
+
+# MSSP Configuration (uncomment and configure if needed)
+# falcon_member_cid: ""
+
+# Multi-tenant configuration (for MSSP)
+# falcon_tenants:
+#   - name: "customer_a"
+#     member_cid: "customer-a-cid"
+#     dlp_policies_dir: "dlp_policies/customer_a"
+#   - name: "customer_b"
+#     member_cid: "customer-b-cid"
+#     dlp_policies_dir: "dlp_policies/customer_b"

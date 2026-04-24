@@ -1,0 +1,28 @@
+---
+# CrowdStrike Falcon Configuration - Development Environment
+
+# Cloud region
+falcon_cloud: "us-1"
+
+# DLP policies directory (relative to playbook)
+falcon_dlp_policies_dir: "dlp_policies"
+
+# Default state mode for dev (report mode for safety)
+falcon_dlp_state_mode: "report"
+
+# Enable debug output in dev
+falcon_dlp_debug: true
+
+# API settings
+falcon_api_timeout: 30
+falcon_api_retries: 3
+falcon_api_retry_delay: 5
+
+# MSSP Configuration (uncomment and configure if needed)
+# falcon_member_cid: ""
+
+# Multi-tenant configuration (for MSSP)
+# falcon_tenants:
+#   - name: "tenant_dev"
+#     member_cid: "your-dev-tenant-cid"
+#     dlp_policies_dir: "dlp_policies"

@@ -1,0 +1,45 @@
+---
+# CrowdStrike Falcon DLP Role - Default Variables
+
+# Cloud region: us-1, us-2, eu-1, us-gov-1, us-gov-2
+falcon_cloud: "us-1"
+
+# State management mode:
+#   report - drift detection only, no changes (default)
+#   ignore - additive only, create/update but never delete
+#   delete - full IaC reconciliation, will remove orphaned resources
+falcon_dlp_state_mode: "report"
+
+# Authentication credentials (prefer Ansible Vault)
+# Falls back to environment variables if not set:
+#   FALCON_CLIENT_ID, FALCON_CLIENT_SECRET
+falcon_client_id: "{{ lookup('env', 'FALCON_CLIENT_ID') | default(omit, true) }}"
+falcon_client_secret: "{{ lookup('env', 'FALCON_CLIENT_SECRET') | default(omit, true) }}"
+
+# MSSP member CID (optional, for multi-tenant environments)
+falcon_member_cid: ""
+
+# Directory containing DLP policy definitions (relative to playbook)
+falcon_dlp_policies_dir: "dlp_policies"
+
+# Resource type toggles - set to false to skip specific resource types
+falcon_dlp_manage_content_patterns: true
+falcon_dlp_manage_classifications: true
+falcon_dlp_manage_policies: true
+falcon_dlp_manage_policy_precedence: true
+falcon_dlp_manage_sensitivity_labels: true
+falcon_dlp_manage_web_locations: true
+falcon_dlp_manage_cloud_applications: true
+falcon_dlp_manage_local_applications: true
+falcon_dlp_manage_local_application_groups: true
+falcon_dlp_manage_enterprise_accounts: true
+
+# API request timeout (seconds)
+falcon_api_timeout: 30
+
+# Retry settings for API calls
+falcon_api_retries: 3
+falcon_api_retry_delay: 5
+
+# Verbose output for debugging
+falcon_dlp_debug: false

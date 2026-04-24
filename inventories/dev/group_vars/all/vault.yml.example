@@ -1,0 +1,18 @@
+---
+# CrowdStrike Falcon API Credentials
+# IMPORTANT: Copy this file to vault.yml and encrypt with ansible-vault
+#
+# To create encrypted vault:
+#   cp vault.yml.example vault.yml
+#   ansible-vault encrypt vault.yml
+#
+# To edit encrypted vault:
+#   ansible-vault edit vault.yml
+
+# API credentials from CrowdStrike Falcon Console
+# Navigate to: Support > API Clients and Keys
+falcon_client_id: "your-client-id-here"
+falcon_client_secret: "your-client-secret-here"
+
+# MSSP member CID (if applicable)
+# falcon_member_cid: "your-member-cid-here"
