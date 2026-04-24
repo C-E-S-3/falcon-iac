@@ -1,0 +1,83 @@
+name: DLP Configuration Deploy
+
+on:
+  # Manual trigger for deployments
+  workflow_dispatch:
+    inputs:
+      state_mode:
+        description: 'State mode'
+        required: true
+        default: 'ignore'
+        type: choice
+        options:
+          - ignore   # Additive only (safe)
+          - delete   # Full reconciliation (destructive)
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - prod
+
+env:
+  FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+  FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+  FALCON_MEMBER_CID: ${{ secrets.FALCON_MEMBER_CID }}
+
+jobs:
+  deploy:
+    name: Deploy DLP Configuration
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+
+      - name: Validate credentials
+        run: |
+          if [ -z "$FALCON_CLIENT_ID" ] || [ -z "$FALCON_CLIENT_SECRET" ]; then
+            echo "::error::FALCON_CLIENT_ID and FALCON_CLIENT_SECRET secrets must be configured"
+            exit 1
+          fi
+
+      - name: Display deployment info
+        run: |
+          echo "## Deployment Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | ${{ github.event.inputs.environment }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| State Mode | ${{ github.event.inputs.state_mode }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Triggered By | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run DLP Deploy Playbook
+        run: |
+          ansible-playbook playbooks/dlp_deploy.yml \
+            -i inventories/${{ github.event.inputs.environment }}/hosts.yml \
+            -e falcon_dlp_state_mode=${{ github.event.inputs.state_mode }} \
+            2>&1 | tee ansible_output.txt
+
+      - name: Create deployment summary
+        if: always()
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          # Extract key output sections
+          grep -A 100 "Changes Summary\|DLP deployment complete\|created\|updated\|deleted" ansible_output.txt | head -50 >> $GITHUB_STEP_SUMMARY || echo "No summary found" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

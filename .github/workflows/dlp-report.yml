@@ -1,0 +1,142 @@
+name: DLP Configuration Report
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'dlp_policies/**'
+      - 'roles/**'
+      - 'playbooks/**'
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      state_mode:
+        description: 'State mode (report, ignore, delete)'
+        required: false
+        default: 'report'
+        type: choice
+        options:
+          - report
+          - ignore
+          - delete
+
+env:
+  FALCON_CLIENT_ID: ${{ secrets.FALCON_CLIENT_ID }}
+  FALCON_CLIENT_SECRET: ${{ secrets.FALCON_CLIENT_SECRET }}
+  FALCON_MEMBER_CID: ${{ secrets.FALCON_MEMBER_CID }}
+
+jobs:
+  dlp-report:
+    name: DLP Configuration Drift Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ansible
+        run: |
+          python -m pip install --upgrade pip
+          pip install ansible
+
+      - name: Validate credentials are configured
+        run: |
+          if [ -z "$FALCON_CLIENT_ID" ] || [ -z "$FALCON_CLIENT_SECRET" ]; then
+            echo "::error::FALCON_CLIENT_ID and FALCON_CLIENT_SECRET secrets must be configured"
+            exit 1
+          fi
+
+      - name: Run DLP Report Playbook
+        id: dlp_report
+        run: |
+          # Determine state mode
+          STATE_MODE="${{ github.event.inputs.state_mode || 'report' }}"
+
+          # Run playbook and capture output
+          ansible-playbook playbooks/dlp_report.yml \
+            -e falcon_dlp_state_mode=${STATE_MODE} \
+            -e falcon_dlp_strict_mode=false \
+            2>&1 | tee ansible_output.txt
+
+          # Store exit code
+          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
+
+      - name: Parse report and create summary
+        id: parse_report
+        run: |
+          # Extract the report section from Ansible output
+          python3 << 'EOF'
+          import re
+          import os
+
+          with open('ansible_output.txt', 'r') as f:
+              output = f.read()
+
+          # Find the changes summary section
+          summary_match = re.search(r'CrowdStrike Falcon DLP - Changes Summary.*?={50,}', output, re.DOTALL)
+
+          # Count drift indicators
+          would_create = len(re.findall(r"Would Create:.*?(?!None)", output))
+          would_update = len(re.findall(r"Would Update:.*?(?!None)", output))
+          would_delete = len(re.findall(r"Would Delete:.*?(?!None)", output))
+
+          # Check for actual non-None values
+          has_drift = False
+          for line in output.split('\n'):
+              if 'Would Create:' in line and 'None' not in line and line.split('Would Create:')[1].strip():
+                  has_drift = True
+              if 'Would Update:' in line and 'None' not in line and line.split('Would Update:')[1].strip():
+                  has_drift = True
+              if 'Would Delete:' in line and 'None' not in line and line.split('Would Delete:')[1].strip():
+                  has_drift = True
+
+          # Write outputs
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"has_drift={'true' if has_drift else 'false'}\n")
+
+          # Create job summary
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
+              f.write("# CrowdStrike Falcon DLP Report\n\n")
+
+              if has_drift:
+                  f.write("## ⚠️ Configuration Drift Detected\n\n")
+                  f.write("The DLP configuration in this PR differs from what's deployed in CrowdStrike.\n\n")
+              else:
+                  f.write("## ✅ No Configuration Drift\n\n")
+                  f.write("The DLP configuration matches what's deployed in CrowdStrike.\n\n")
+
+              f.write("### Ansible Output\n\n")
+              f.write("```\n")
+
+              # Extract relevant output sections
+              in_summary = False
+              for line in output.split('\n'):
+                  if 'Changes Summary' in line or 'Changes:' in line or 'To Create:' in line or 'To Update:' in line or 'To Delete:' in line or 'Would' in line:
+                      in_summary = True
+                  if in_summary:
+                      f.write(line + '\n')
+                  if 'State Mode:' in line:
+                      in_summary = False
+
+              f.write("```\n")
+
+          print(f"Drift detected: {has_drift}")
+          EOF
+
+      - name: Fail if drift detected
+        if: steps.parse_report.outputs.has_drift == 'true'
+        run: |
+          echo "::error::DLP configuration drift detected. Review the job summary for details."
+          echo "To apply these changes, merge the PR and run the deploy workflow with state_mode=ignore"
+          exit 1
+
+      - name: Report success
+        if: steps.parse_report.outputs.has_drift == 'false'
+        run: |
+          echo "✅ DLP configuration is in sync with CrowdStrike"

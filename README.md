@@ -23,7 +23,7 @@ Ansible role and playbooks for managing CrowdStrike Falcon Data Protection (DLP)
 ### 1. Clone and Configure
 
 ```bash
-git clone https://github.com/your-org/falcon-iac.git
+git clone https://github.com/C-E-S-3/falcon-iac.git
 cd falcon-iac
 
 # Set up credentials (choose one method)
@@ -158,6 +158,44 @@ falcon_dlp_manage_web_locations: true
 | `report` | No | No | No | Drift detection, CI/CD validation |
 | `ignore` | Yes | Yes | No | Safe deployments, additive only |
 | `delete` | Yes | Yes | Yes | Full IaC, remove orphaned resources |
+
+## CI/CD with GitHub Actions
+
+This repository includes GitHub Actions workflows for automated drift detection and deployment.
+
+### Setup
+
+1. Add secrets to your repository (Settings > Secrets > Actions):
+   - `FALCON_CLIENT_ID` - Your CrowdStrike API client ID
+   - `FALCON_CLIENT_SECRET` - Your CrowdStrike API client secret
+   - `FALCON_MEMBER_CID` (optional) - For MSSP multi-tenant
+
+2. Optionally create GitHub Environments (`dev`, `prod`) for deployment approvals.
+
+### Workflows
+
+#### DLP Report (`.github/workflows/dlp-report.yml`)
+
+Runs automatically on PRs that modify `dlp_policies/`, `roles/`, or `playbooks/`.
+
+- Checks for configuration drift
+- Posts report to Job Summary
+- **Fails if drift detected** (blocks PR merge until config matches)
+
+#### DLP Deploy (`.github/workflows/dlp-deploy.yml`)
+
+Manual trigger only (workflow_dispatch). Use after merging PRs.
+
+- Select environment (`dev` or `prod`)
+- Select state mode (`ignore` or `delete`)
+- Posts deployment summary to Job Summary
+
+### Workflow
+
+1. **Create PR** with policy changes in `dlp_policies/`
+2. **Report workflow runs** - shows what would change
+3. **Review and merge** PR
+4. **Manually trigger deploy** workflow to apply changes
 
 ## License
 
