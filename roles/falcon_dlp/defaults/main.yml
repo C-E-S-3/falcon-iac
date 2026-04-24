@@ -43,3 +43,7 @@ falcon_api_retry_delay: 5
 
 # Verbose output for debugging
 falcon_dlp_debug: false
+
+# JSON report output file (set to enable JSON output for CI/CD and SIEM)
+# Example: falcon_dlp_report_file: "{{ playbook_dir }}/dlp_report.json"
+falcon_dlp_report_file: ""

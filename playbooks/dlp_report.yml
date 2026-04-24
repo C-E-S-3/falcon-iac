@@ -13,7 +13,7 @@
 - name: Report CrowdStrike Falcon DLP Configuration Drift
   hosts: localhost
   connection: local
-  gather_facts: false
+  gather_facts: true  # Required for timestamp in JSON report
 
   vars:
     # Force report mode - this playbook is always read-only

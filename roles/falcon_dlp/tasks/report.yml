@@ -111,3 +111,42 @@
     - (falcon_dlp_report.summary.total_would_create | int == 0)
     - (falcon_dlp_report.summary.total_would_update | int == 0)
     - (falcon_dlp_report.summary.total_would_delete | int == 0)
+
+# JSON output for CI/CD and SIEM integration
+- name: Build JSON report
+  ansible.builtin.set_fact:
+    _falcon_dlp_json_report:
+      timestamp: "{{ ansible_date_time.iso8601 }}"
+      event_type: "dlp_configuration_report"
+      source: "falcon-iac"
+      environment:
+        cloud_region: "{{ falcon_cloud }}"
+        member_cid: "{{ falcon_member_cid | default(omit) }}"
+        state_mode: "{{ falcon_dlp_state_mode }}"
+        playbook: "{{ ansible_play_name }}"
+        hostname: "{{ inventory_hostname }}"
+      result:
+        has_drift: >-
+          {{
+            (falcon_dlp_report.summary.total_would_create | int > 0) or
+            (falcon_dlp_report.summary.total_would_update | int > 0) or
+            (falcon_dlp_report.summary.total_would_delete | int > 0) or
+            (falcon_dlp_report.summary.total_created | int > 0) or
+            (falcon_dlp_report.summary.total_updated | int > 0) or
+            (falcon_dlp_report.summary.total_deleted | int > 0)
+          }}
+        summary: "{{ falcon_dlp_report.summary }}"
+      changes: "{{ _falcon_dlp_changes }}"
+
+- name: Write JSON report to file
+  ansible.builtin.copy:
+    content: "{{ _falcon_dlp_json_report | to_nice_json }}"
+    dest: "{{ falcon_dlp_report_file }}"
+    mode: '0644'
+  delegate_to: localhost
+  when: falcon_dlp_report_file | default('') | length > 0
+
+- name: Display JSON report path
+  ansible.builtin.debug:
+    msg: "JSON report written to: {{ falcon_dlp_report_file }}"
+  when: falcon_dlp_report_file | default('') | length > 0

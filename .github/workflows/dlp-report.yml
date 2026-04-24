@@ -40,7 +40,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Ansible
+      - name: Install Ansible and jq
         run: |
           python -m pip install --upgrade pip
           pip install ansible
@@ -53,90 +53,78 @@ jobs:
           fi
 
       - name: Run DLP Report Playbook
-        id: dlp_report
         run: |
-          # Determine state mode
           STATE_MODE="${{ github.event.inputs.state_mode || 'report' }}"
 
-          # Run playbook and capture output
           ansible-playbook playbooks/dlp_report.yml \
             -e falcon_dlp_state_mode=${STATE_MODE} \
             -e falcon_dlp_strict_mode=false \
-            2>&1 | tee ansible_output.txt
+            -e falcon_dlp_report_file="${PWD}/dlp_report.json"
 
-          # Store exit code
-          echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
-
-      - name: Parse report and create summary
-        id: parse_report
+      - name: Check for drift
+        id: drift_check
         run: |
-          # Extract the report section from Ansible output
-          python3 << 'EOF'
-          import re
-          import os
+          # Read the JSON report
+          HAS_DRIFT=$(jq -r '.result.has_drift' dlp_report.json)
+          echo "has_drift=${HAS_DRIFT}" >> $GITHUB_OUTPUT
 
-          with open('ansible_output.txt', 'r') as f:
-              output = f.read()
+          # Extract summary counts
+          WOULD_CREATE=$(jq -r '.result.summary.total_would_create' dlp_report.json)
+          WOULD_UPDATE=$(jq -r '.result.summary.total_would_update' dlp_report.json)
+          WOULD_DELETE=$(jq -r '.result.summary.total_would_delete' dlp_report.json)
 
-          # Find the changes summary section
-          summary_match = re.search(r'CrowdStrike Falcon DLP - Changes Summary.*?={50,}', output, re.DOTALL)
+          echo "would_create=${WOULD_CREATE}" >> $GITHUB_OUTPUT
+          echo "would_update=${WOULD_UPDATE}" >> $GITHUB_OUTPUT
+          echo "would_delete=${WOULD_DELETE}" >> $GITHUB_OUTPUT
 
-          # Count drift indicators
-          would_create = len(re.findall(r"Would Create:.*?(?!None)", output))
-          would_update = len(re.findall(r"Would Update:.*?(?!None)", output))
-          would_delete = len(re.findall(r"Would Delete:.*?(?!None)", output))
+      - name: Create Job Summary
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          # CrowdStrike Falcon DLP Report
 
-          # Check for actual non-None values
-          has_drift = False
-          for line in output.split('\n'):
-              if 'Would Create:' in line and 'None' not in line and line.split('Would Create:')[1].strip():
-                  has_drift = True
-              if 'Would Update:' in line and 'None' not in line and line.split('Would Update:')[1].strip():
-                  has_drift = True
-              if 'Would Delete:' in line and 'None' not in line and line.split('Would Delete:')[1].strip():
-                  has_drift = True
-
-          # Write outputs
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"has_drift={'true' if has_drift else 'false'}\n")
-
-          # Create job summary
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as f:
-              f.write("# CrowdStrike Falcon DLP Report\n\n")
-
-              if has_drift:
-                  f.write("## ⚠️ Configuration Drift Detected\n\n")
-                  f.write("The DLP configuration in this PR differs from what's deployed in CrowdStrike.\n\n")
-              else:
-                  f.write("## ✅ No Configuration Drift\n\n")
-                  f.write("The DLP configuration matches what's deployed in CrowdStrike.\n\n")
-
-              f.write("### Ansible Output\n\n")
-              f.write("```\n")
-
-              # Extract relevant output sections
-              in_summary = False
-              for line in output.split('\n'):
-                  if 'Changes Summary' in line or 'Changes:' in line or 'To Create:' in line or 'To Update:' in line or 'To Delete:' in line or 'Would' in line:
-                      in_summary = True
-                  if in_summary:
-                      f.write(line + '\n')
-                  if 'State Mode:' in line:
-                      in_summary = False
-
-              f.write("```\n")
-
-          print(f"Drift detected: {has_drift}")
           EOF
 
+          HAS_DRIFT="${{ steps.drift_check.outputs.has_drift }}"
+
+          if [ "$HAS_DRIFT" = "true" ] || [ "$HAS_DRIFT" = "True" ]; then
+            echo "## ⚠️ Configuration Drift Detected" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ✅ No Configuration Drift" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+
+          | Metric | Count |
+          |--------|-------|
+          | Would Create | ${{ steps.drift_check.outputs.would_create }} |
+          | Would Update | ${{ steps.drift_check.outputs.would_update }} |
+          | Would Delete | ${{ steps.drift_check.outputs.would_delete }} |
+
+          ### Full Report
+
+          \`\`\`json
+          $(cat dlp_report.json)
+          \`\`\`
+          EOF
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dlp-report
+          path: dlp_report.json
+          retention-days: 30
+
+      # Optional: Send to SIEM (uncomment and configure)
+      # - name: Send report to SIEM
+      #   if: always()
+      #   run: |
+      #     curl -X POST "${{ secrets.SIEM_ENDPOINT }}" \
+      #       -H "Authorization: Bearer ${{ secrets.SIEM_TOKEN }}" \
+      #       -H "Content-Type: application/json" \
+      #       -d @dlp_report.json
+
       - name: Fail if drift detected
-        if: steps.parse_report.outputs.has_drift == 'true'
+        if: steps.drift_check.outputs.has_drift == 'true' || steps.drift_check.outputs.has_drift == 'True'
         run: |
           echo "::error::DLP configuration drift detected. Review the job summary for details."
-          echo "To apply these changes, merge the PR and run the deploy workflow with state_mode=ignore"
           exit 1
-
-      - name: Report success
-        if: steps.parse_report.outputs.has_drift == 'false'
-        run: |
-          echo "✅ DLP configuration is in sync with CrowdStrike"

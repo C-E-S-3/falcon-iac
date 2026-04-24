@@ -17,7 +17,7 @@
 - name: Deploy CrowdStrike Falcon DLP Configuration
   hosts: localhost
   connection: local
-  gather_facts: false
+  gather_facts: true  # Required for timestamp in JSON report
 
   vars:
     # Override state mode via command line: -e falcon_dlp_state_mode=ignore
