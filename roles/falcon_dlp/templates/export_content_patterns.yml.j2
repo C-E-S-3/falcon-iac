@@ -1,0 +1,31 @@
+---
+# CrowdStrike Falcon DLP -- content patterns (current state)
+# Generated: {{ ansible_date_time.iso8601 }}
+#
+# Copy entries you want under IaC management into your
+# {{ falcon_dlp_policies_dir }}/content_patterns/ directory.
+{%- if _existing_patterns_system | length > 0 %}
+#
+# System-defined patterns ({{ _existing_patterns_system | length }}) are protected and NOT exported:
+{%- for p in _existing_patterns_system | sort(attribute='name') %}
+#   - {{ p.name }}
+{%- endfor %}
+{%- endif %}
+
+falcon_dlp_content_patterns:
+{%- if _existing_patterns_user | length == 0 %} []
+{%- endif %}
+{%- for p in _existing_patterns_user | sort(attribute='name') %}
+  - name: {{ p.name | to_json }}
+    description: {{ p.description | default('') | to_json }}
+    category: {{ p.category | default('custom') | to_json }}
+    region: {{ p.region | default('global') | to_json }}
+    min_match_threshold: {{ p.min_match_threshold | default(1) }}
+    regexes:
+{%- for r in p.regexes | default([]) %}
+      - {{ r | to_json }}
+{%- endfor %}
+{%- if p.example | default('') %}
+    example: {{ p.example | to_json }}
+{%- endif %}
+{%- endfor %}

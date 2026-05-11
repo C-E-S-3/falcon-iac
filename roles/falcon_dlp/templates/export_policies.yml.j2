@@ -1,0 +1,34 @@
+---
+# CrowdStrike Falcon DLP -- policies (current state)
+# Generated: {{ ansible_date_time.iso8601 }}
+#
+# Copy entries you want under IaC management into your
+# {{ falcon_dlp_policies_dir }}/policies/ directory.
+# Classification IDs have been resolved back to names. Entries marked
+# "# UNKNOWN_ID:..." reference a classification that no longer exists.
+{%- if _existing_policies_system | length > 0 %}
+#
+# System-defined policies ({{ _existing_policies_system | length }}) are protected and NOT exported:
+{%- for p in _existing_policies_system | sort(attribute='name') %}
+#   - {{ p.name }}
+{%- endfor %}
+{%- endif %}
+
+falcon_dlp_policies:
+{%- if _existing_policies_user | length == 0 %} []
+{%- endif %}
+{%- for p in _existing_policies_user | sort(attribute='name') %}
+  - name: {{ p.name | to_json }}
+    description: {{ p.description | default('') | to_json }}
+    enabled: {{ (p.enabled | default(true)) | to_json }}
+    platform: {{ p.platform | default('win') | to_json }}
+    classifications:
+{%- for cid in p.classifications | default([]) %}
+{%- if cid in (_classifications_by_id | default({})) %}
+      - {{ _classifications_by_id[cid] | to_json }}
+{%- else %}
+      - {{ ('UNKNOWN_ID:' ~ cid) | to_json }}
+{%- endif %}
+{%- endfor %}
+    host_groups: {{ p.host_groups | default([]) | to_json }}
+{%- endfor %}

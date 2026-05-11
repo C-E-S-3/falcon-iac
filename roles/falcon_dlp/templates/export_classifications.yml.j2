@@ -1,0 +1,63 @@
+---
+# CrowdStrike Falcon DLP -- classifications (current state)
+# Generated: {{ ansible_date_time.iso8601 }}
+#
+# Copy entries you want under IaC management into your
+# {{ falcon_dlp_policies_dir }}/classifications/ directory.
+# Reference IDs (content_patterns, file_types, sensitivity_labels, rules.web_locations)
+# have been resolved back to names. Entries marked "# UNKNOWN_ID:..." reference
+# an entity that no longer exists in this tenant.
+{%- if _existing_classifications_system | length > 0 %}
+#
+# System-defined classifications ({{ _existing_classifications_system | length }}) are protected and NOT exported:
+{%- for c in _existing_classifications_system | sort(attribute='name') %}
+#   - {{ c.name }}
+{%- endfor %}
+{%- endif %}
+
+falcon_dlp_classifications:
+{%- if _existing_classifications_user | length == 0 %} []
+{%- endif %}
+{%- for c in _existing_classifications_user | sort(attribute='name') %}
+  - name: {{ c.name | to_json }}
+    description: {{ c.description | default('') | to_json }}
+    enabled: {{ (c.enabled | default(true)) | to_json }}
+    content_patterns:
+{%- for pid in c.content_patterns | default([]) %}
+{%- if pid in (_content_patterns_by_id | default({})) %}
+      - {{ _content_patterns_by_id[pid] | to_json }}
+{%- else %}
+      - {{ ('UNKNOWN_ID:' ~ pid) | to_json }}
+{%- endif %}
+{%- endfor %}
+    file_types:
+{%- for fid in c.file_types | default([]) %}
+{%- if fid in (_falcon_file_types_by_id | default({})) %}
+      - {{ _falcon_file_types_by_id[fid].name | to_json }}
+{%- else %}
+      - {{ ('UNKNOWN_ID:' ~ fid) | to_json }}
+{%- endif %}
+{%- endfor %}
+    sensitivity_labels:
+{%- for sid in c.sensitivity_labels | default([]) %}
+{%- if sid in (_sensitivity_labels_by_id | default({})) %}
+      - {{ _sensitivity_labels_by_id[sid] | to_json }}
+{%- else %}
+      - {{ ('UNKNOWN_ID:' ~ sid) | to_json }}
+{%- endif %}
+{%- endfor %}
+    rules:
+{%- for r in c.rules | default([]) %}
+      - detection_severity: {{ r.detection_severity | default('medium') | to_json }}
+        response_action: {{ r.response_action | default('alert') | to_json }}
+        trigger_detection: {{ (r.trigger_detection | default(true)) | to_json }}
+        web_locations:
+{%- for wid in r.web_locations | default([]) %}
+{%- if wid in (_web_locations_by_id | default({})) %}
+          - {{ _web_locations_by_id[wid] | to_json }}
+{%- else %}
+          - {{ ('UNKNOWN_ID:' ~ wid) | to_json }}
+{%- endif %}
+{%- endfor %}
+{%- endfor %}
+{%- endfor %}

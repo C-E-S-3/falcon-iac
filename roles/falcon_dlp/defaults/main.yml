@@ -47,3 +47,13 @@ falcon_dlp_debug: false
 # JSON report output file (set to enable JSON output for CI/CD and SIEM)
 # Example: falcon_dlp_report_file: "{{ playbook_dir }}/dlp_report.json"
 falcon_dlp_report_file: ""
+
+# Directory to write the current CrowdStrike DLP state as IaC-feedable YAML.
+# When set, the report run produces one file per entity type containing the
+# user-defined entries currently configured in the tenant. System-defined
+# entries are listed in each file's comment header for reference but are
+# excluded from the data (they are protected from modification by the role).
+# Copy the entries you want to manage into your falcon_dlp_policies_dir
+# (default: dlp_policies/) to bring them under IaC management.
+# Example: falcon_dlp_export_dir: "{{ playbook_dir }}/dlp_current_state"
+falcon_dlp_export_dir: ""

@@ -1,0 +1,22 @@
+---
+# CrowdStrike Falcon DLP -- sensitivity labels (current state)
+# Generated: {{ ansible_date_time.iso8601 }}
+#
+# Copy entries you want under IaC management into your
+# {{ falcon_dlp_policies_dir }}/sensitivity_labels/ directory.
+{%- if _existing_labels_system | length > 0 %}
+#
+# System-defined labels ({{ _existing_labels_system | length }}) are protected and NOT exported:
+{%- for l in _existing_labels_system | sort(attribute='name') %}
+#   - {{ l.name }}
+{%- endfor %}
+{%- endif %}
+
+falcon_dlp_sensitivity_labels:
+{%- if _existing_labels_user | length == 0 %} []
+{%- endif %}
+{%- for l in _existing_labels_user | sort(attribute='name') %}
+  - name: {{ l.name | to_json }}
+    description: {{ l.description | default('') | to_json }}
+    source: {{ l.source | default('custom') | to_json }}
+{%- endfor %}

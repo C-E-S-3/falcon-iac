@@ -1,0 +1,138 @@
+---
+# Export current CrowdStrike Falcon DLP state as IaC-feedable YAML.
+# One file per entity type is written into falcon_dlp_export_dir.
+# Only user-defined entries are emitted; system-defined entries are
+# listed in each file's comment header for reference.
+
+- name: Ensure export directory exists
+  ansible.builtin.file:
+    path: "{{ falcon_dlp_export_dir }}"
+    state: directory
+    mode: '0755'
+  delegate_to: localhost
+
+- name: Build ID-to-name lookup maps for reference resolution
+  ansible.builtin.set_fact:
+    _content_patterns_by_id: >-
+      {{
+        dict(
+          (_existing_patterns_list | default([])) | map(attribute='id') |
+          zip((_existing_patterns_list | default([])) | map(attribute='name'))
+        )
+      }}
+    _sensitivity_labels_by_id: >-
+      {{
+        dict(
+          (_existing_labels_list | default([])) | map(attribute='id') |
+          zip((_existing_labels_list | default([])) | map(attribute='name'))
+        )
+      }}
+    _web_locations_by_id: >-
+      {{
+        dict(
+          (_existing_web_locations_list | default([])) | map(attribute='id') |
+          zip((_existing_web_locations_list | default([])) | map(attribute='name'))
+        )
+      }}
+    _classifications_by_id: >-
+      {{
+        dict(
+          (_existing_classifications_list | default([])) | map(attribute='id') |
+          zip((_existing_classifications_list | default([])) | map(attribute='name'))
+        )
+      }}
+    _local_apps_by_id: >-
+      {{
+        dict(
+          (_existing_local_apps_list | default([])) | map(attribute='id') |
+          zip((_existing_local_apps_list | default([])) | map(attribute='name'))
+        )
+      }}
+
+- name: Render content patterns export
+  ansible.builtin.template:
+    src: export_content_patterns.yml.j2
+    dest: "{{ falcon_dlp_export_dir }}/content_patterns.yml"
+    mode: '0644'
+  delegate_to: localhost
+  when: _existing_patterns_list is defined
+
+- name: Render sensitivity labels export
+  ansible.builtin.template:
+    src: export_sensitivity_labels.yml.j2
+    dest: "{{ falcon_dlp_export_dir }}/sensitivity_labels.yml"
+    mode: '0644'
+  delegate_to: localhost
+  when: _existing_labels_list is defined
+
+- name: Render web locations export
+  ansible.builtin.template:
+    src: export_web_locations.yml.j2
+    dest: "{{ falcon_dlp_export_dir }}/web_locations.yml"
+    mode: '0644'
+  delegate_to: localhost
+  when: _existing_web_locations_list is defined
+
+- name: Render cloud applications export
+  ansible.builtin.template:
+    src: export_cloud_applications.yml.j2
+    dest: "{{ falcon_dlp_export_dir }}/cloud_applications.yml"
+    mode: '0644'
+  delegate_to: localhost
+  when: _existing_cloud_apps_list is defined
+
+- name: Render enterprise accounts export
+  ansible.builtin.template:
+    src: export_enterprise_accounts.yml.j2
+    dest: "{{ falcon_dlp_export_dir }}/enterprise_accounts.yml"
+    mode: '0644'
+  delegate_to: localhost
+  when: _existing_enterprise_accounts_list is defined
+
+- name: Render local applications export
+  ansible.builtin.template:
+    src: export_local_applications.yml.j2
+    dest: "{{ falcon_dlp_export_dir }}/local_applications.yml"
+    mode: '0644'
+  delegate_to: localhost
+  when: _existing_local_apps_list is defined
+
+- name: Render local application groups export
+  ansible.builtin.template:
+    src: export_local_application_groups.yml.j2
+    dest: "{{ falcon_dlp_export_dir }}/local_application_groups.yml"
+    mode: '0644'
+  delegate_to: localhost
+  when: _existing_local_app_groups_list is defined
+
+- name: Render classifications export
+  ansible.builtin.template:
+    src: export_classifications.yml.j2
+    dest: "{{ falcon_dlp_export_dir }}/classifications.yml"
+    mode: '0644'
+  delegate_to: localhost
+  when: _existing_classifications_list is defined
+
+- name: Render policies export
+  ansible.builtin.template:
+    src: export_policies.yml.j2
+    dest: "{{ falcon_dlp_export_dir }}/policies.yml"
+    mode: '0644'
+  delegate_to: localhost
+  when: _existing_policies_list is defined
+
+- name: Show state export summary
+  ansible.builtin.debug:
+    msg: |
+      Current state exported to: {{ falcon_dlp_export_dir }}
+      Files written:
+        - content_patterns.yml          ({{ _existing_patterns_user | default([]) | length }} user / {{ _existing_patterns_system | default([]) | length }} system)
+        - sensitivity_labels.yml        ({{ _existing_labels_user | default([]) | length }} user / {{ _existing_labels_system | default([]) | length }} system)
+        - web_locations.yml             ({{ _existing_web_locations_user | default([]) | length }} user / {{ _existing_web_locations_system | default([]) | length }} system)
+        - cloud_applications.yml        ({{ _existing_cloud_apps_user | default([]) | length }} user / {{ _existing_cloud_apps_system | default([]) | length }} system)
+        - enterprise_accounts.yml       ({{ _existing_enterprise_accounts_user | default([]) | length }} user / {{ _existing_enterprise_accounts_system | default([]) | length }} system)
+        - local_applications.yml        ({{ _existing_local_apps_user | default([]) | length }} user / {{ _existing_local_apps_system | default([]) | length }} system)
+        - local_application_groups.yml  ({{ _existing_local_app_groups_user | default([]) | length }} user / {{ _existing_local_app_groups_system | default([]) | length }} system)
+        - classifications.yml           ({{ _existing_classifications_user | default([]) | length }} user / {{ _existing_classifications_system | default([]) | length }} system)
+        - policies.yml                  ({{ _existing_policies_user | default([]) | length }} user / {{ _existing_policies_system | default([]) | length }} system)
+      Copy desired entries into {{ falcon_dlp_policies_dir }}/ to bring them under IaC management.

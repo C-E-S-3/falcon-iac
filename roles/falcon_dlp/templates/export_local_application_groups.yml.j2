@@ -1,0 +1,32 @@
+---
+# CrowdStrike Falcon DLP -- local application groups (current state)
+# Generated: {{ ansible_date_time.iso8601 }}
+#
+# Copy entries you want under IaC management into your
+# {{ falcon_dlp_policies_dir }}/local_application_groups/ directory.
+# Application IDs have been resolved back to names from the local_applications
+# table. Entries marked "# UNKNOWN_ID:..." reference an application that
+# no longer exists in this tenant.
+{%- if _existing_local_app_groups_system | length > 0 %}
+#
+# System-defined local application groups ({{ _existing_local_app_groups_system | length }}) are protected and NOT exported:
+{%- for g in _existing_local_app_groups_system | sort(attribute='name') %}
+#   - {{ g.name }}
+{%- endfor %}
+{%- endif %}
+
+falcon_dlp_local_application_groups:
+{%- if _existing_local_app_groups_user | length == 0 %} []
+{%- endif %}
+{%- for g in _existing_local_app_groups_user | sort(attribute='name') %}
+  - name: {{ g.name | to_json }}
+    description: {{ g.description | default('') | to_json }}
+    applications:
+{%- for app_id in g.applications | default([]) %}
+{%- if app_id in (_local_apps_by_id | default({})) %}
+      - {{ _local_apps_by_id[app_id] | to_json }}
+{%- else %}
+      - {{ ('UNKNOWN_ID:' ~ app_id) | to_json }}  # orphaned reference
+{%- endif %}
+{%- endfor %}
+{%- endfor %}

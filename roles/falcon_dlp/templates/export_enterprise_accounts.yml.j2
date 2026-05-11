@@ -1,0 +1,26 @@
+---
+# CrowdStrike Falcon DLP -- enterprise accounts (current state)
+# Generated: {{ ansible_date_time.iso8601 }}
+#
+# Copy entries you want under IaC management into your
+# {{ falcon_dlp_policies_dir }}/enterprise_accounts/ directory.
+{%- if _existing_enterprise_accounts_system | length > 0 %}
+#
+# System-defined enterprise accounts ({{ _existing_enterprise_accounts_system | length }}) are protected and NOT exported:
+{%- for a in _existing_enterprise_accounts_system | sort(attribute='name') %}
+#   - {{ a.name }}
+{%- endfor %}
+{%- endif %}
+
+falcon_dlp_enterprise_accounts:
+{%- if _existing_enterprise_accounts_user | length == 0 %} []
+{%- endif %}
+{%- for a in _existing_enterprise_accounts_user | sort(attribute='name') %}
+  - name: {{ a.name | to_json }}
+    description: {{ a.description | default('') | to_json }}
+    account_type: {{ a.account_type | default('') | to_json }}
+    domains:
+{%- for d in a.domains | default([]) %}
+      - {{ d | to_json }}
+{%- endfor %}
+{%- endfor %}

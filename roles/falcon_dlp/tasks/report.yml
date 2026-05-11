@@ -150,3 +150,8 @@
   ansible.builtin.debug:
     msg: "JSON report written to: {{ falcon_dlp_report_file }}"
   when: falcon_dlp_report_file | default('') | length > 0
+
+# Export current state as IaC-feedable YAML
+- name: Export current state as IaC YAML
+  ansible.builtin.include_tasks: export_state.yml
+  when: falcon_dlp_export_dir | default('') | length > 0
