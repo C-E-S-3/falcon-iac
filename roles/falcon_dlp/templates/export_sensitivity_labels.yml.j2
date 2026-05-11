@@ -4,18 +4,18 @@
 #
 # Copy entries you want under IaC management into your
 # {{ falcon_dlp_policies_dir }}/sensitivity_labels/ directory.
-{%- if _existing_labels_system | length > 0 %}
+{%- if _truly_system_labels | length > 0 %}
 #
-# System-defined labels ({{ _existing_labels_system | length }}) are protected and NOT exported:
-{%- for l in _existing_labels_system | sort(attribute='name') %}
+# System-defined labels ({{ _truly_system_labels | length }}) are protected and NOT exported:
+{%- for l in _truly_system_labels | sort(attribute='name') %}
 #   - {{ l.name }}
 {%- endfor %}
 {%- endif %}
 
 falcon_dlp_sensitivity_labels:
-{%- if _existing_labels_user | length == 0 %} []
+{%- if _for_export_labels | length == 0 %} []
 {%- endif %}
-{%- for l in _existing_labels_user | sort(attribute='name') %}
+{%- for l in _for_export_labels | sort(attribute='name') %}
   - name: {{ l.name | to_json }}
     description: {{ l.description | default('') | to_json }}
     source: {{ l.source | default('custom') | to_json }}

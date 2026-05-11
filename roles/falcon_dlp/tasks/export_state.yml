@@ -49,6 +49,55 @@
         )
       }}
 
+# The role's main classification (_existing_X_system / _existing_X_user) is
+# fail-safe for delete: missing system_defined => treated as system =>
+# protected. For export, we want the opposite bias -- include anything that
+# isn't *explicitly* flagged system_defined: true, so user-managed entries
+# missing the attribute are visible for cherry-picking. Compute strict
+# partitions here, used only by the export templates.
+- name: Compute strict system/user partitions for state export
+  ansible.builtin.set_fact:
+    # Strictly system: explicit system_defined: true. Shown in header.
+    _truly_system_patterns: "{{ (_existing_patterns_list | default([])) | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list }}"
+    _truly_system_labels: "{{ (_existing_labels_list | default([])) | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list }}"
+    _truly_system_web_locations: "{{ (_existing_web_locations_list | default([])) | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list }}"
+    _truly_system_cloud_apps: "{{ (_existing_cloud_apps_list | default([])) | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list }}"
+    _truly_system_enterprise_accounts: "{{ (_existing_enterprise_accounts_list | default([])) | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list }}"
+    _truly_system_local_apps: "{{ (_existing_local_apps_list | default([])) | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list }}"
+    _truly_system_local_app_groups: "{{ (_existing_local_app_groups_list | default([])) | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list }}"
+    _truly_system_classifications: "{{ (_existing_classifications_list | default([])) | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list }}"
+    _truly_system_policies: "{{ (_existing_policies_list | default([])) | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list }}"
+
+- name: "Compute exportable partitions (anything not explicitly system_defined: true)"
+  ansible.builtin.set_fact:
+    _for_export_patterns: >-
+      {{ ((_existing_patterns_list | default([])) | rejectattr('system_defined', 'defined') | list)
+         + ((_existing_patterns_list | default([])) | selectattr('system_defined', 'defined') | rejectattr('system_defined', 'equalto', true) | list) }}
+    _for_export_labels: >-
+      {{ ((_existing_labels_list | default([])) | rejectattr('system_defined', 'defined') | list)
+         + ((_existing_labels_list | default([])) | selectattr('system_defined', 'defined') | rejectattr('system_defined', 'equalto', true) | list) }}
+    _for_export_web_locations: >-
+      {{ ((_existing_web_locations_list | default([])) | rejectattr('system_defined', 'defined') | list)
+         + ((_existing_web_locations_list | default([])) | selectattr('system_defined', 'defined') | rejectattr('system_defined', 'equalto', true) | list) }}
+    _for_export_cloud_apps: >-
+      {{ ((_existing_cloud_apps_list | default([])) | rejectattr('system_defined', 'defined') | list)
+         + ((_existing_cloud_apps_list | default([])) | selectattr('system_defined', 'defined') | rejectattr('system_defined', 'equalto', true) | list) }}
+    _for_export_enterprise_accounts: >-
+      {{ ((_existing_enterprise_accounts_list | default([])) | rejectattr('system_defined', 'defined') | list)
+         + ((_existing_enterprise_accounts_list | default([])) | selectattr('system_defined', 'defined') | rejectattr('system_defined', 'equalto', true) | list) }}
+    _for_export_local_apps: >-
+      {{ ((_existing_local_apps_list | default([])) | rejectattr('system_defined', 'defined') | list)
+         + ((_existing_local_apps_list | default([])) | selectattr('system_defined', 'defined') | rejectattr('system_defined', 'equalto', true) | list) }}
+    _for_export_local_app_groups: >-
+      {{ ((_existing_local_app_groups_list | default([])) | rejectattr('system_defined', 'defined') | list)
+         + ((_existing_local_app_groups_list | default([])) | selectattr('system_defined', 'defined') | rejectattr('system_defined', 'equalto', true) | list) }}
+    _for_export_classifications: >-
+      {{ ((_existing_classifications_list | default([])) | rejectattr('system_defined', 'defined') | list)
+         + ((_existing_classifications_list | default([])) | selectattr('system_defined', 'defined') | rejectattr('system_defined', 'equalto', true) | list) }}
+    _for_export_policies: >-
+      {{ ((_existing_policies_list | default([])) | rejectattr('system_defined', 'defined') | list)
+         + ((_existing_policies_list | default([])) | selectattr('system_defined', 'defined') | rejectattr('system_defined', 'equalto', true) | list) }}
+
 - name: Render content patterns export
   ansible.builtin.template:
     src: export_content_patterns.yml.j2
@@ -126,13 +175,13 @@
     msg: |
       Current state exported to: {{ falcon_dlp_export_dir }}
       Files written:
-        - content_patterns.yml          ({{ _existing_patterns_user | default([]) | length }} user / {{ _existing_patterns_system | default([]) | length }} system)
-        - sensitivity_labels.yml        ({{ _existing_labels_user | default([]) | length }} user / {{ _existing_labels_system | default([]) | length }} system)
-        - web_locations.yml             ({{ _existing_web_locations_user | default([]) | length }} user / {{ _existing_web_locations_system | default([]) | length }} system)
-        - cloud_applications.yml        ({{ _existing_cloud_apps_user | default([]) | length }} user / {{ _existing_cloud_apps_system | default([]) | length }} system)
-        - enterprise_accounts.yml       ({{ _existing_enterprise_accounts_user | default([]) | length }} user / {{ _existing_enterprise_accounts_system | default([]) | length }} system)
-        - local_applications.yml        ({{ _existing_local_apps_user | default([]) | length }} user / {{ _existing_local_apps_system | default([]) | length }} system)
-        - local_application_groups.yml  ({{ _existing_local_app_groups_user | default([]) | length }} user / {{ _existing_local_app_groups_system | default([]) | length }} system)
-        - classifications.yml           ({{ _existing_classifications_user | default([]) | length }} user / {{ _existing_classifications_system | default([]) | length }} system)
-        - policies.yml                  ({{ _existing_policies_user | default([]) | length }} user / {{ _existing_policies_system | default([]) | length }} system)
+        - content_patterns.yml          ({{ _for_export_patterns | default([]) | length }} user / {{ _truly_system_patterns | default([]) | length }} system)
+        - sensitivity_labels.yml        ({{ _for_export_labels | default([]) | length }} user / {{ _truly_system_labels | default([]) | length }} system)
+        - web_locations.yml             ({{ _for_export_web_locations | default([]) | length }} user / {{ _truly_system_web_locations | default([]) | length }} system)
+        - cloud_applications.yml        ({{ _for_export_cloud_apps | default([]) | length }} user / {{ _truly_system_cloud_apps | default([]) | length }} system)
+        - enterprise_accounts.yml       ({{ _for_export_enterprise_accounts | default([]) | length }} user / {{ _truly_system_enterprise_accounts | default([]) | length }} system)
+        - local_applications.yml        ({{ _for_export_local_apps | default([]) | length }} user / {{ _truly_system_local_apps | default([]) | length }} system)
+        - local_application_groups.yml  ({{ _for_export_local_app_groups | default([]) | length }} user / {{ _truly_system_local_app_groups | default([]) | length }} system)
+        - classifications.yml           ({{ _for_export_classifications | default([]) | length }} user / {{ _truly_system_classifications | default([]) | length }} system)
+        - policies.yml                  ({{ _for_export_policies | default([]) | length }} user / {{ _truly_system_policies | default([]) | length }} system)
       Copy desired entries into {{ falcon_dlp_policies_dir }}/ to bring them under IaC management.

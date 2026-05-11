@@ -4,18 +4,18 @@
 #
 # Copy entries you want under IaC management into your
 # {{ falcon_dlp_policies_dir }}/enterprise_accounts/ directory.
-{%- if _existing_enterprise_accounts_system | length > 0 %}
+{%- if _truly_system_enterprise_accounts | length > 0 %}
 #
-# System-defined enterprise accounts ({{ _existing_enterprise_accounts_system | length }}) are protected and NOT exported:
-{%- for a in _existing_enterprise_accounts_system | sort(attribute='name') %}
+# System-defined enterprise accounts ({{ _truly_system_enterprise_accounts | length }}) are protected and NOT exported:
+{%- for a in _truly_system_enterprise_accounts | sort(attribute='name') %}
 #   - {{ a.name }}
 {%- endfor %}
 {%- endif %}
 
 falcon_dlp_enterprise_accounts:
-{%- if _existing_enterprise_accounts_user | length == 0 %} []
+{%- if _for_export_enterprise_accounts | length == 0 %} []
 {%- endif %}
-{%- for a in _existing_enterprise_accounts_user | sort(attribute='name') %}
+{%- for a in _for_export_enterprise_accounts | sort(attribute='name') %}
   - name: {{ a.name | to_json }}
     description: {{ a.description | default('') | to_json }}
     account_type: {{ a.account_type | default('') | to_json }}

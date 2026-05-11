@@ -7,18 +7,18 @@
 # Application IDs have been resolved back to names from the local_applications
 # table. Entries marked "# UNKNOWN_ID:..." reference an application that
 # no longer exists in this tenant.
-{%- if _existing_local_app_groups_system | length > 0 %}
+{%- if _truly_system_local_app_groups | length > 0 %}
 #
-# System-defined local application groups ({{ _existing_local_app_groups_system | length }}) are protected and NOT exported:
-{%- for g in _existing_local_app_groups_system | sort(attribute='name') %}
+# System-defined local application groups ({{ _truly_system_local_app_groups | length }}) are protected and NOT exported:
+{%- for g in _truly_system_local_app_groups | sort(attribute='name') %}
 #   - {{ g.name }}
 {%- endfor %}
 {%- endif %}
 
 falcon_dlp_local_application_groups:
-{%- if _existing_local_app_groups_user | length == 0 %} []
+{%- if _for_export_local_app_groups | length == 0 %} []
 {%- endif %}
-{%- for g in _existing_local_app_groups_user | sort(attribute='name') %}
+{%- for g in _for_export_local_app_groups | sort(attribute='name') %}
   - name: {{ g.name | to_json }}
     description: {{ g.description | default('') | to_json }}
     applications:

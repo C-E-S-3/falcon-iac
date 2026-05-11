@@ -6,18 +6,18 @@
 # {{ falcon_dlp_policies_dir }}/policies/ directory.
 # Classification IDs have been resolved back to names. Entries marked
 # "# UNKNOWN_ID:..." reference a classification that no longer exists.
-{%- if _existing_policies_system | length > 0 %}
+{%- if _truly_system_policies | length > 0 %}
 #
-# System-defined policies ({{ _existing_policies_system | length }}) are protected and NOT exported:
-{%- for p in _existing_policies_system | sort(attribute='name') %}
+# System-defined policies ({{ _truly_system_policies | length }}) are protected and NOT exported:
+{%- for p in _truly_system_policies | sort(attribute='name') %}
 #   - {{ p.name }}
 {%- endfor %}
 {%- endif %}
 
 falcon_dlp_policies:
-{%- if _existing_policies_user | length == 0 %} []
+{%- if _for_export_policies | length == 0 %} []
 {%- endif %}
-{%- for p in _existing_policies_user | sort(attribute='name') %}
+{%- for p in _for_export_policies | sort(attribute='name') %}
   - name: {{ p.name | to_json }}
     description: {{ p.description | default('') | to_json }}
     enabled: {{ (p.enabled | default(true)) | to_json }}

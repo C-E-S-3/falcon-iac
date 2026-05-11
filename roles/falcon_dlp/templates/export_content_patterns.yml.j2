@@ -4,18 +4,18 @@
 #
 # Copy entries you want under IaC management into your
 # {{ falcon_dlp_policies_dir }}/content_patterns/ directory.
-{%- if _existing_patterns_system | length > 0 %}
+{%- if _truly_system_patterns | length > 0 %}
 #
-# System-defined patterns ({{ _existing_patterns_system | length }}) are protected and NOT exported:
-{%- for p in _existing_patterns_system | sort(attribute='name') %}
+# System-defined patterns ({{ _truly_system_patterns | length }}) are protected and NOT exported:
+{%- for p in _truly_system_patterns | sort(attribute='name') %}
 #   - {{ p.name }}
 {%- endfor %}
 {%- endif %}
 
 falcon_dlp_content_patterns:
-{%- if _existing_patterns_user | length == 0 %} []
+{%- if _for_export_patterns | length == 0 %} []
 {%- endif %}
-{%- for p in _existing_patterns_user | sort(attribute='name') %}
+{%- for p in _for_export_patterns | sort(attribute='name') %}
   - name: {{ p.name | to_json }}
     description: {{ p.description | default('') | to_json }}
     category: {{ p.category | default('custom') | to_json }}

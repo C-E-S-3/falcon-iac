@@ -7,18 +7,18 @@
 # Reference IDs (content_patterns, file_types, sensitivity_labels, rules.web_locations)
 # have been resolved back to names. Entries marked "# UNKNOWN_ID:..." reference
 # an entity that no longer exists in this tenant.
-{%- if _existing_classifications_system | length > 0 %}
+{%- if _truly_system_classifications | length > 0 %}
 #
-# System-defined classifications ({{ _existing_classifications_system | length }}) are protected and NOT exported:
-{%- for c in _existing_classifications_system | sort(attribute='name') %}
+# System-defined classifications ({{ _truly_system_classifications | length }}) are protected and NOT exported:
+{%- for c in _truly_system_classifications | sort(attribute='name') %}
 #   - {{ c.name }}
 {%- endfor %}
 {%- endif %}
 
 falcon_dlp_classifications:
-{%- if _existing_classifications_user | length == 0 %} []
+{%- if _for_export_classifications | length == 0 %} []
 {%- endif %}
-{%- for c in _existing_classifications_user | sort(attribute='name') %}
+{%- for c in _for_export_classifications | sort(attribute='name') %}
   - name: {{ c.name | to_json }}
     description: {{ c.description | default('') | to_json }}
     enabled: {{ (c.enabled | default(true)) | to_json }}

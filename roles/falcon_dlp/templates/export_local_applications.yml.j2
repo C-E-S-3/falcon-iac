@@ -4,18 +4,18 @@
 #
 # Copy entries you want under IaC management into your
 # {{ falcon_dlp_policies_dir }}/local_applications/ directory.
-{%- if _existing_local_apps_system | length > 0 %}
+{%- if _truly_system_local_apps | length > 0 %}
 #
-# System-defined local applications ({{ _existing_local_apps_system | length }}) are protected and NOT exported:
-{%- for a in _existing_local_apps_system | sort(attribute='name') %}
+# System-defined local applications ({{ _truly_system_local_apps | length }}) are protected and NOT exported:
+{%- for a in _truly_system_local_apps | sort(attribute='name') %}
 #   - {{ a.name }}
 {%- endfor %}
 {%- endif %}
 
 falcon_dlp_local_applications:
-{%- if _existing_local_apps_user | length == 0 %} []
+{%- if _for_export_local_apps | length == 0 %} []
 {%- endif %}
-{%- for a in _existing_local_apps_user | sort(attribute='name') %}
+{%- for a in _for_export_local_apps | sort(attribute='name') %}
   - name: {{ a.name | to_json }}
     description: {{ a.description | default('') | to_json }}
     platform: {{ a.platform | default('win') | to_json }}
