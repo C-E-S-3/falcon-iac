@@ -15,19 +15,22 @@
 
 - name: Fetch existing sensitivity label details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _sensitivity_labels_query.json.resources }}"
-  register: _existing_sensitivity_labels
-  when: _sensitivity_labels_query.json.resources | length > 0
+  register: _existing_sensitivity_labels_raw
+  loop: "{{ _sensitivity_labels_query.json.resources }}"
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
-  until: _existing_sensitivity_labels is succeeded
+  until: _existing_sensitivity_labels_raw is succeeded
+
+- name: Aggregate existing sensitivity label details
+  ansible.builtin.set_fact:
+    _existing_sensitivity_labels:
+      json:
+        resources: "{{ (_existing_sensitivity_labels_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
 
 - name: Build existing sensitivity labels lookup
   ansible.builtin.set_fact:
@@ -130,15 +133,22 @@
 
 - name: Fetch refreshed sensitivity label details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.sensitivity_labels_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _labels_query_refresh.json.resources }}"
-  register: _refreshed_labels
+  register: _refreshed_labels_raw
+  loop: "{{ _labels_query_refresh.json.resources | default([]) }}"
+  when:
+    - _labels_query_refresh is defined
+    - _labels_query_refresh.json.resources | default([]) | length > 0
+
+- name: Aggregate refreshed sensitivity label details
+  ansible.builtin.set_fact:
+    _refreshed_labels:
+      json:
+        resources: "{{ (_refreshed_labels_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
   when:
     - _labels_query_refresh is defined
     - _labels_query_refresh.json.resources | default([]) | length > 0

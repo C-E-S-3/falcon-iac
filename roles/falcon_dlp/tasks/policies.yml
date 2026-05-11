@@ -15,19 +15,22 @@
 
 - name: Fetch existing policy details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _policies_query.json.resources }}"
-  register: _existing_policies
-  when: _policies_query.json.resources | length > 0
+  register: _existing_policies_raw
+  loop: "{{ _policies_query.json.resources }}"
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
-  until: _existing_policies is succeeded
+  until: _existing_policies_raw is succeeded
+
+- name: Aggregate existing policy details
+  ansible.builtin.set_fact:
+    _existing_policies:
+      json:
+        resources: "{{ (_existing_policies_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
 
 - name: Build existing policies lookup
   ansible.builtin.set_fact:
@@ -196,15 +199,22 @@
 
 - name: Fetch refreshed policy details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _policies_query_refresh.json.resources }}"
-  register: _refreshed_policies
+  register: _refreshed_policies_raw
+  loop: "{{ _policies_query_refresh.json.resources | default([]) }}"
+  when:
+    - _policies_query_refresh is defined
+    - _policies_query_refresh.json.resources | default([]) | length > 0
+
+- name: Aggregate refreshed policy details
+  ansible.builtin.set_fact:
+    _refreshed_policies:
+      json:
+        resources: "{{ (_refreshed_policies_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
   when:
     - _policies_query_refresh is defined
     - _policies_query_refresh.json.resources | default([]) | length > 0

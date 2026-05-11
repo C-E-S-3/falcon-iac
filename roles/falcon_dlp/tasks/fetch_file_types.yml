@@ -16,19 +16,22 @@
 
 - name: Fetch file type details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.file_types_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.file_types_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _file_types_query.json.resources }}"
-  register: _file_types_response
-  when: _file_types_query.json.resources | length > 0
+  register: _file_types_response_raw
+  loop: "{{ _file_types_query.json.resources }}"
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
-  until: _file_types_response is succeeded
+  until: _file_types_response_raw is succeeded
+
+- name: Aggregate file type details
+  ansible.builtin.set_fact:
+    _file_types_response:
+      json:
+        resources: "{{ (_file_types_response_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
 
 - name: Build file types lookup maps
   ansible.builtin.set_fact:

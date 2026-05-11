@@ -15,19 +15,22 @@
 
 - name: Fetch existing classification details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.classifications_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.classifications_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _classifications_query.json.resources }}"
-  register: _existing_classifications
-  when: _classifications_query.json.resources | length > 0
+  register: _existing_classifications_raw
+  loop: "{{ _classifications_query.json.resources }}"
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
-  until: _existing_classifications is succeeded
+  until: _existing_classifications_raw is succeeded
+
+- name: Aggregate existing classification details
+  ansible.builtin.set_fact:
+    _existing_classifications:
+      json:
+        resources: "{{ (_existing_classifications_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
 
 - name: Build existing classifications lookup
   ansible.builtin.set_fact:
@@ -236,15 +239,22 @@
 
 - name: Fetch refreshed classification details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.classifications_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.classifications_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _classifications_query_refresh.json.resources }}"
-  register: _refreshed_classifications
+  register: _refreshed_classifications_raw
+  loop: "{{ _classifications_query_refresh.json.resources | default([]) }}"
+  when:
+    - _classifications_query_refresh is defined
+    - _classifications_query_refresh.json.resources | default([]) | length > 0
+
+- name: Aggregate refreshed classification details
+  ansible.builtin.set_fact:
+    _refreshed_classifications:
+      json:
+        resources: "{{ (_refreshed_classifications_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
   when:
     - _classifications_query_refresh is defined
     - _classifications_query_refresh.json.resources | default([]) | length > 0

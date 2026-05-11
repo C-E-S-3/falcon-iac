@@ -15,19 +15,22 @@
 
 - name: Fetch existing local application group details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.local_application_groups_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.local_application_groups_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _local_app_groups_query.json.resources }}"
-  register: _existing_local_app_groups
-  when: _local_app_groups_query.json.resources | length > 0
+  register: _existing_local_app_groups_raw
+  loop: "{{ _local_app_groups_query.json.resources }}"
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
-  until: _existing_local_app_groups is succeeded
+  until: _existing_local_app_groups_raw is succeeded
+
+- name: Aggregate existing local application group details
+  ansible.builtin.set_fact:
+    _existing_local_app_groups:
+      json:
+        resources: "{{ (_existing_local_app_groups_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
 
 - name: Build existing local application groups lookup
   ansible.builtin.set_fact:

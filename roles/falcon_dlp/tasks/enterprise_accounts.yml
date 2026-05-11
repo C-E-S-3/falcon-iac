@@ -15,19 +15,22 @@
 
 - name: Fetch existing enterprise account details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.enterprise_accounts_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.enterprise_accounts_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _enterprise_accounts_query.json.resources }}"
-  register: _existing_enterprise_accounts
-  when: _enterprise_accounts_query.json.resources | length > 0
+  register: _existing_enterprise_accounts_raw
+  loop: "{{ _enterprise_accounts_query.json.resources }}"
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
-  until: _existing_enterprise_accounts is succeeded
+  until: _existing_enterprise_accounts_raw is succeeded
+
+- name: Aggregate existing enterprise account details
+  ansible.builtin.set_fact:
+    _existing_enterprise_accounts:
+      json:
+        resources: "{{ (_existing_enterprise_accounts_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
 
 - name: Build existing enterprise accounts lookup
   ansible.builtin.set_fact:

@@ -15,19 +15,22 @@
 
 - name: Fetch existing content pattern details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _content_patterns_query.json.resources }}"
-  register: _existing_content_patterns
-  when: _content_patterns_query.json.resources | length > 0
+  register: _existing_content_patterns_raw
+  loop: "{{ _content_patterns_query.json.resources }}"
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
-  until: _existing_content_patterns is succeeded
+  until: _existing_content_patterns_raw is succeeded
+
+- name: Aggregate existing content pattern details
+  ansible.builtin.set_fact:
+    _existing_content_patterns:
+      json:
+        resources: "{{ (_existing_content_patterns_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
 
 - name: Build existing content patterns lookup
   ansible.builtin.set_fact:
@@ -177,15 +180,22 @@
 
 - name: Fetch refreshed content pattern details
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}?ids={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-    body_format: json
-    body:
-      ids: "{{ _content_patterns_query_refresh.json.resources }}"
-  register: _refreshed_content_patterns
+  register: _refreshed_content_patterns_raw
+  loop: "{{ _content_patterns_query_refresh.json.resources | default([]) }}"
+  when:
+    - _content_patterns_query_refresh is defined
+    - _content_patterns_query_refresh.json.resources | default([]) | length > 0
+
+- name: Aggregate refreshed content pattern details
+  ansible.builtin.set_fact:
+    _refreshed_content_patterns:
+      json:
+        resources: "{{ (_refreshed_content_patterns_raw.results | default([])) | map(attribute='json.resources') | flatten | list }}"
   when:
     - _content_patterns_query_refresh is defined
     - _content_patterns_query_refresh.json.resources | default([]) | length > 0
