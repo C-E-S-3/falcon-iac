@@ -3,12 +3,18 @@
 #
 # This playbook always runs in report mode to detect drift between
 # your YAML definitions and the actual CrowdStrike configuration.
+# It also writes the current tenant state as IaC-feedable YAML to
+# ../dlp_current_state/ (one file per entity type) so you can pick
+# entries to bring under IaC management.
 #
 # Usage:
 #   ansible-playbook playbooks/dlp_report.yml -i inventories/dev/hosts.yml
 #
 #   # With debug output
 #   ansible-playbook playbooks/dlp_report.yml -i inventories/dev/hosts.yml -e falcon_dlp_debug=true
+#
+#   # Disable the state export
+#   ansible-playbook playbooks/dlp_report.yml -i inventories/dev/hosts.yml -e falcon_dlp_export_dir=""
 
 - name: Report CrowdStrike Falcon DLP Configuration Drift
   hosts: localhost
@@ -18,6 +24,11 @@
   vars:
     # Force report mode - this playbook is always read-only
     falcon_dlp_state_mode: "report"
+
+    # Write current tenant state as IaC-feedable YAML next to the
+    # repo's dlp_policies/ directory so it can be cherry-picked.
+    # Override with -e falcon_dlp_export_dir="" to skip.
+    falcon_dlp_export_dir: "{{ playbook_dir }}/../dlp_current_state"
 
   pre_tasks:
     - name: Display report configuration
