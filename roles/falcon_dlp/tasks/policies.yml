@@ -1,17 +1,32 @@
 ---
 # Manage CrowdStrike DLP Policies
 
-- name: Query existing policies
+# The /queries/policies/v2 endpoint requires a platform_name query
+# parameter (win or mac) -- without it the API returns 400. Query each
+# platform and concatenate the resulting ID lists.
+- name: Query existing policies per platform
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_query }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_query }}?platform_name={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-  register: _policies_query
+  register: _policies_query_raw
+  loop: ['win', 'mac']
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
-  until: _policies_query is succeeded
+  until: _policies_query_raw is succeeded
+
+- name: Aggregate policy IDs from all platforms
+  ansible.builtin.set_fact:
+    _policies_query:
+      json:
+        resources: "{{ (_policies_query_raw.results | default([])) | map(attribute='json.resources') | map('default', []) | flatten | select | list }}"
+
+- name: Show aggregated policy query response (debug)
+  ansible.builtin.debug:
+    var: _policies_query.json
+  when: falcon_dlp_debug | default(false) | bool
 
 - name: Fetch existing policy details
   ansible.builtin.uri:
@@ -214,18 +229,27 @@
   delay: "{{ falcon_api_retry_delay }}"
   until: _delete_policies_result is succeeded
 
-# Refresh policies lookup after changes
-- name: Re-query policies after changes
+# Refresh policies lookup after changes -- per-platform, same reason
+# as the initial query (platform_name is a required parameter).
+- name: Re-query policies per platform after changes
   ansible.builtin.uri:
-    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_query }}"
+    url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_query }}?platform_name={{ item }}"
     method: GET
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
-  register: _policies_query_refresh
+  register: _policies_query_refresh_raw
+  loop: ['win', 'mac']
   when: >
     (_policies_to_create | length > 0 and _falcon_state_actions[falcon_dlp_state_mode].create) or
     (_policies_to_delete | length > 0 and _falcon_state_actions[falcon_dlp_state_mode].delete)
+
+- name: Aggregate refreshed policy IDs from all platforms
+  ansible.builtin.set_fact:
+    _policies_query_refresh:
+      json:
+        resources: "{{ (_policies_query_refresh_raw.results | default([])) | selectattr('json', 'defined') | map(attribute='json.resources') | map('default', []) | flatten | select | list }}"
+  when: _policies_query_refresh_raw is defined and (_policies_query_refresh_raw.results | default([])) | length > 0
 
 - name: Fetch refreshed policy details
   ansible.builtin.uri:
