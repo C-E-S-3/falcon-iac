@@ -4,23 +4,25 @@
 #
 # Copy entries you want under IaC management into your
 # {{ falcon_dlp_policies_dir }}/cloud_applications/ directory.
-{%- if _truly_system_cloud_apps | length > 0 %}
+{% if _truly_system_cloud_apps | length > 0 %}
 #
 # System-defined cloud applications ({{ _truly_system_cloud_apps | length }}) are protected and NOT exported:
-{%- for c in _truly_system_cloud_apps | sort(attribute='name') %}
+{% for c in _truly_system_cloud_apps | sort(attribute='name') %}
 #   - {{ c.name }}
-{%- endfor %}
-{%- endif %}
+{% endfor %}
+{% endif %}
 
+{% if _for_export_cloud_apps | length == 0 %}
+falcon_dlp_cloud_applications: []
+{% else %}
 falcon_dlp_cloud_applications:
-{%- if _for_export_cloud_apps | length == 0 %} []
-{%- endif %}
-{%- for c in _for_export_cloud_apps | sort(attribute='name') %}
+{% for c in _for_export_cloud_apps | sort(attribute='name') %}
   - name: {{ c.name | to_json }}
     description: {{ c.description | default('') | to_json }}
     urls:
-{%- for u in c.urls | default([]) %}
+{% for u in c.urls | default([]) %}
       - fqdn: {{ u.fqdn | default('') | to_json }}
         path: {{ u.path | default('/*') | to_json }}
-{%- endfor %}
-{%- endfor %}
+{% endfor %}
+{% endfor %}
+{% endif %}

@@ -4,23 +4,25 @@
 #
 # Copy entries you want under IaC management into your
 # {{ falcon_dlp_policies_dir }}/web_locations/ directory.
-{%- if _truly_system_web_locations | length > 0 %}
+{% if _truly_system_web_locations | length > 0 %}
 #
 # System-defined web locations ({{ _truly_system_web_locations | length }}) are protected and NOT exported:
-{%- for w in _truly_system_web_locations | sort(attribute='name') %}
+{% for w in _truly_system_web_locations | sort(attribute='name') %}
 #   - {{ w.name }}
-{%- endfor %}
-{%- endif %}
+{% endfor %}
+{% endif %}
 
+{% if _for_export_web_locations | length == 0 %}
+falcon_dlp_web_locations: []
+{% else %}
 falcon_dlp_web_locations:
-{%- if _for_export_web_locations | length == 0 %} []
-{%- endif %}
-{%- for w in _for_export_web_locations | sort(attribute='name') %}
+{% for w in _for_export_web_locations | sort(attribute='name') %}
   - name: {{ w.name | to_json }}
     description: {{ w.description | default('') | to_json }}
     urls:
-{%- for u in w.urls | default([]) %}
+{% for u in w.urls | default([]) %}
       - fqdn: {{ u.fqdn | default('') | to_json }}
         path: {{ u.path | default('/*') | to_json }}
-{%- endfor %}
-{%- endfor %}
+{% endfor %}
+{% endfor %}
+{% endif %}

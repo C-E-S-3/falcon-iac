@@ -4,28 +4,30 @@
 #
 # Copy entries you want under IaC management into your
 # {{ falcon_dlp_policies_dir }}/content_patterns/ directory.
-{%- if _truly_system_patterns | length > 0 %}
+{% if _truly_system_patterns | length > 0 %}
 #
 # System-defined patterns ({{ _truly_system_patterns | length }}) are protected and NOT exported:
-{%- for p in _truly_system_patterns | sort(attribute='name') %}
+{% for p in _truly_system_patterns | sort(attribute='name') %}
 #   - {{ p.name }}
-{%- endfor %}
-{%- endif %}
+{% endfor %}
+{% endif %}
 
+{% if _for_export_patterns | length == 0 %}
+falcon_dlp_content_patterns: []
+{% else %}
 falcon_dlp_content_patterns:
-{%- if _for_export_patterns | length == 0 %} []
-{%- endif %}
-{%- for p in _for_export_patterns | sort(attribute='name') %}
+{% for p in _for_export_patterns | sort(attribute='name') %}
   - name: {{ p.name | to_json }}
     description: {{ p.description | default('') | to_json }}
     category: {{ p.category | default('custom') | to_json }}
     region: {{ p.region | default('global') | to_json }}
     min_match_threshold: {{ p.min_match_threshold | default(1) }}
     regexes:
-{%- for r in p.regexes | default([]) %}
+{% for r in p.regexes | default([]) %}
       - {{ r | to_json }}
-{%- endfor %}
-{%- if p.example | default('') %}
+{% endfor %}
+{% if p.example | default('') %}
     example: {{ p.example | to_json }}
-{%- endif %}
-{%- endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}

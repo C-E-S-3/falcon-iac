@@ -4,31 +4,33 @@
 #
 # Copy entries you want under IaC management into your
 # {{ falcon_dlp_policies_dir }}/local_applications/ directory.
-{%- if _truly_system_local_apps | length > 0 %}
+{% if _truly_system_local_apps | length > 0 %}
 #
 # System-defined local applications ({{ _truly_system_local_apps | length }}) are protected and NOT exported:
-{%- for a in _truly_system_local_apps | sort(attribute='name') %}
+{% for a in _truly_system_local_apps | sort(attribute='name') %}
 #   - {{ a.name }}
-{%- endfor %}
-{%- endif %}
+{% endfor %}
+{% endif %}
 
+{% if _for_export_local_apps | length == 0 %}
+falcon_dlp_local_applications: []
+{% else %}
 falcon_dlp_local_applications:
-{%- if _for_export_local_apps | length == 0 %} []
-{%- endif %}
-{%- for a in _for_export_local_apps | sort(attribute='name') %}
+{% for a in _for_export_local_apps | sort(attribute='name') %}
   - name: {{ a.name | to_json }}
     description: {{ a.description | default('') | to_json }}
     platform: {{ a.platform | default('win') | to_json }}
     paths:
-{%- for p in a.paths | default([]) %}
+{% for p in a.paths | default([]) %}
       - {{ p | to_json }}
-{%- endfor %}
+{% endfor %}
     file_names:
-{%- for f in a.file_names | default([]) %}
+{% for f in a.file_names | default([]) %}
       - {{ f | to_json }}
-{%- endfor %}
+{% endfor %}
     sha256_hashes:
-{%- for h in a.sha256_hashes | default([]) %}
+{% for h in a.sha256_hashes | default([]) %}
       - {{ h | to_json }}
-{%- endfor %}
-{%- endfor %}
+{% endfor %}
+{% endfor %}
+{% endif %}

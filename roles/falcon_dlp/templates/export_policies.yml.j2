@@ -6,29 +6,31 @@
 # {{ falcon_dlp_policies_dir }}/policies/ directory.
 # Classification IDs have been resolved back to names. Entries marked
 # "# UNKNOWN_ID:..." reference a classification that no longer exists.
-{%- if _truly_system_policies | length > 0 %}
+{% if _truly_system_policies | length > 0 %}
 #
 # System-defined policies ({{ _truly_system_policies | length }}) are protected and NOT exported:
-{%- for p in _truly_system_policies | sort(attribute='name') %}
+{% for p in _truly_system_policies | sort(attribute='name') %}
 #   - {{ p.name }}
-{%- endfor %}
-{%- endif %}
+{% endfor %}
+{% endif %}
 
+{% if _for_export_policies | length == 0 %}
+falcon_dlp_policies: []
+{% else %}
 falcon_dlp_policies:
-{%- if _for_export_policies | length == 0 %} []
-{%- endif %}
-{%- for p in _for_export_policies | sort(attribute='name') %}
+{% for p in _for_export_policies | sort(attribute='name') %}
   - name: {{ p.name | to_json }}
     description: {{ p.description | default('') | to_json }}
     enabled: {{ (p.enabled | default(true)) | to_json }}
     platform: {{ p.platform | default('win') | to_json }}
     classifications:
-{%- for cid in p.classifications | default([]) %}
-{%- if cid in (_classifications_by_id | default({})) %}
+{% for cid in p.classifications | default([]) %}
+{% if cid in (_classifications_by_id | default({})) %}
       - {{ _classifications_by_id[cid] | to_json }}
-{%- else %}
+{% else %}
       - {{ ('UNKNOWN_ID:' ~ cid) | to_json }}
-{%- endif %}
-{%- endfor %}
+{% endif %}
+{% endfor %}
     host_groups: {{ p.host_groups | default([]) | to_json }}
-{%- endfor %}
+{% endfor %}
+{% endif %}
