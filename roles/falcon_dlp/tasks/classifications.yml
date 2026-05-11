@@ -42,47 +42,6 @@
       }}
 
 # Resolve name references to IDs for classifications
-- name: Resolve content pattern names to IDs
-  ansible.builtin.set_fact:
-    _resolved_classifications: >-
-      {{
-        falcon_dlp_classifications | map('combine', {
-          '_resolved_content_pattern_ids': (
-            item.content_patterns | default([]) |
-            map('extract', _falcon_content_patterns_by_name | default({}), 'id') |
-            select('defined') |
-            list
-          ) if item.content_patterns is defined else [],
-          '_resolved_file_type_ids': (
-            item.file_types | default([]) |
-            map('extract', _falcon_file_types_by_name | default({}), 'id') |
-            select('defined') |
-            list
-          ) if item.file_types is defined else [],
-          '_resolved_sensitivity_label_ids': (
-            item.sensitivity_labels | default([]) |
-            map('extract', _falcon_sensitivity_labels_by_name | default({}), 'id') |
-            select('defined') |
-            list
-          ) if item.sensitivity_labels is defined else [],
-          '_resolved_web_location_ids': (
-            item.rules | default([]) |
-            map(attribute='web_locations') |
-            flatten |
-            map('extract', _falcon_web_locations_by_name | default({}), 'id') |
-            select('defined') |
-            list
-          ) if item.rules is defined else []
-        }) | list
-      }}
-  vars:
-    item: "{{ classification }}"
-  loop: "{{ falcon_dlp_classifications }}"
-  loop_control:
-    loop_var: classification
-    label: "{{ classification.name }}"
-
-# Simpler approach: build resolved classifications list
 - name: Build resolved classifications with ID references
   ansible.builtin.set_fact:
     _resolved_classifications: "{{ _resolved_classifications_temp | default([]) }}"
