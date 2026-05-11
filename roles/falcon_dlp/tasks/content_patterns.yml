@@ -43,6 +43,23 @@
           zip(_existing_content_patterns.json.resources | default([]))
         )
       }}
+    _existing_patterns_system: >-
+      {{
+        (_existing_patterns_list | rejectattr('system_defined', 'defined') | list)
+        + (_existing_patterns_list | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list)
+      }}
+    _existing_patterns_user: >-
+      {{
+        _existing_patterns_list
+        | selectattr('system_defined', 'defined')
+        | rejectattr('system_defined', 'equalto', true)
+        | list
+      }}
+
+- name: Show protected (system-defined) content patterns
+  ansible.builtin.debug:
+    msg: "Protected from deletion ({{ _existing_patterns_system | length }}): {{ _existing_patterns_system | map(attribute='name') | list }}"
+  when: _existing_patterns_system | length > 0
 
 - name: Determine content patterns to create
   ansible.builtin.set_fact:
@@ -68,19 +85,7 @@
   ansible.builtin.set_fact:
     _patterns_to_delete: >-
       {{
-        (_candidates
-         | selectattr('system_defined', 'defined')
-         | rejectattr('system_defined', 'equalto', true)
-         | list)
-        +
-        (_candidates
-         | rejectattr('system_defined', 'defined')
-         | list)
-      }}
-  vars:
-    _candidates: >-
-      {{
-        _existing_patterns_list
+        _existing_patterns_user
         | rejectattr('name', 'in', falcon_dlp_content_patterns | map(attribute='name') | list)
         | list
       }}
@@ -154,6 +159,17 @@
   until: _update_patterns_result is succeeded
 
 # Delete orphaned content patterns
+- name: Refuse to delete any system-defined content patterns
+  ansible.builtin.assert:
+    that:
+      - >-
+        _patterns_to_delete
+        | selectattr('system_defined', 'defined')
+        | selectattr('system_defined', 'equalto', true)
+        | list | length == 0
+    fail_msg: "BUG: system-defined content patterns reached the delete list — refusing to proceed"
+  when: _patterns_to_delete | length > 0
+
 - name: Delete orphaned content patterns
   ansible.builtin.uri:
     url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}"

@@ -43,6 +43,23 @@
           zip(_existing_sensitivity_labels.json.resources | default([]))
         )
       }}
+    _existing_labels_system: >-
+      {{
+        (_existing_labels_list | rejectattr('system_defined', 'defined') | list)
+        + (_existing_labels_list | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list)
+      }}
+    _existing_labels_user: >-
+      {{
+        _existing_labels_list
+        | selectattr('system_defined', 'defined')
+        | rejectattr('system_defined', 'equalto', true)
+        | list
+      }}
+
+- name: Show protected (system-defined) sensitivity labels
+  ansible.builtin.debug:
+    msg: "Protected from deletion ({{ _existing_labels_system | length }}): {{ _existing_labels_system | map(attribute='name') | list }}"
+  when: _existing_labels_system | length > 0
 
 - name: Determine sensitivity labels to create
   ansible.builtin.set_fact:
@@ -58,19 +75,7 @@
   ansible.builtin.set_fact:
     _labels_to_delete: >-
       {{
-        (_candidates
-         | selectattr('system_defined', 'defined')
-         | rejectattr('system_defined', 'equalto', true)
-         | list)
-        +
-        (_candidates
-         | rejectattr('system_defined', 'defined')
-         | list)
-      }}
-  vars:
-    _candidates: >-
-      {{
-        _existing_labels_list
+        _existing_labels_user
         | rejectattr('name', 'in', falcon_dlp_sensitivity_labels | map(attribute='name') | list)
         | list
       }}
@@ -106,6 +111,17 @@
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
   until: _create_labels_result is succeeded
+
+- name: Refuse to delete any system-defined sensitivity labels
+  ansible.builtin.assert:
+    that:
+      - >-
+        _labels_to_delete
+        | selectattr('system_defined', 'defined')
+        | selectattr('system_defined', 'equalto', true)
+        | list | length == 0
+    fail_msg: "BUG: system-defined sensitivity labels reached the delete list — refusing to proceed"
+  when: _labels_to_delete | length > 0
 
 - name: Delete orphaned sensitivity labels
   ansible.builtin.uri:

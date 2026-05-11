@@ -43,6 +43,23 @@
           zip(_existing_policies.json.resources | default([]))
         )
       }}
+    _existing_policies_system: >-
+      {{
+        (_existing_policies_list | rejectattr('system_defined', 'defined') | list)
+        + (_existing_policies_list | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list)
+      }}
+    _existing_policies_user: >-
+      {{
+        _existing_policies_list
+        | selectattr('system_defined', 'defined')
+        | rejectattr('system_defined', 'equalto', true)
+        | list
+      }}
+
+- name: Show protected (system-defined) policies
+  ansible.builtin.debug:
+    msg: "Protected from deletion ({{ _existing_policies_system | length }}): {{ _existing_policies_system | map(attribute='name') | list }}"
+  when: _existing_policies_system | length > 0
 
 # Resolve name references to IDs for policies
 - name: Build resolved policies with ID references
@@ -89,19 +106,7 @@
   ansible.builtin.set_fact:
     _policies_to_delete: >-
       {{
-        (_candidates
-         | selectattr('system_defined', 'defined')
-         | rejectattr('system_defined', 'equalto', true)
-         | list)
-        +
-        (_candidates
-         | rejectattr('system_defined', 'defined')
-         | list)
-      }}
-  vars:
-    _candidates: >-
-      {{
-        _existing_policies_list
+        _existing_policies_user
         | rejectattr('name', 'in', falcon_dlp_policies | map(attribute='name') | list)
         | list
       }}
@@ -173,6 +178,17 @@
   until: _update_policies_result is succeeded
 
 # Delete orphaned policies
+- name: Refuse to delete any system-defined policies
+  ansible.builtin.assert:
+    that:
+      - >-
+        _policies_to_delete
+        | selectattr('system_defined', 'defined')
+        | selectattr('system_defined', 'equalto', true)
+        | list | length == 0
+    fail_msg: "BUG: system-defined policies reached the delete list — refusing to proceed"
+  when: _policies_to_delete | length > 0
+
 - name: Delete orphaned policies
   ansible.builtin.uri:
     url: "{{ falcon_base_url }}{{ _falcon_endpoints.policies_entities }}"

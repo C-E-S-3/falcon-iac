@@ -43,6 +43,23 @@
           zip(_existing_local_applications.json.resources | default([]))
         )
       }}
+    _existing_local_apps_system: >-
+      {{
+        (_existing_local_apps_list | rejectattr('system_defined', 'defined') | list)
+        + (_existing_local_apps_list | selectattr('system_defined', 'defined') | selectattr('system_defined', 'equalto', true) | list)
+      }}
+    _existing_local_apps_user: >-
+      {{
+        _existing_local_apps_list
+        | selectattr('system_defined', 'defined')
+        | rejectattr('system_defined', 'equalto', true)
+        | list
+      }}
+
+- name: Show protected (system-defined) local applications
+  ansible.builtin.debug:
+    msg: "Protected from deletion ({{ _existing_local_apps_system | length }}): {{ _existing_local_apps_system | map(attribute='name') | list }}"
+  when: _existing_local_apps_system | length > 0
 
 - name: Determine local applications to create
   ansible.builtin.set_fact:
@@ -68,19 +85,7 @@
   ansible.builtin.set_fact:
     _local_apps_to_delete: >-
       {{
-        (_candidates
-         | selectattr('system_defined', 'defined')
-         | rejectattr('system_defined', 'equalto', true)
-         | list)
-        +
-        (_candidates
-         | rejectattr('system_defined', 'defined')
-         | list)
-      }}
-  vars:
-    _candidates: >-
-      {{
-        _existing_local_apps_list
+        _existing_local_apps_user
         | rejectattr('name', 'in', falcon_dlp_local_applications | map(attribute='name') | list)
         | list
       }}
@@ -148,6 +153,17 @@
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
   until: _update_local_apps_result is succeeded
+
+- name: Refuse to delete any system-defined local applications
+  ansible.builtin.assert:
+    that:
+      - >-
+        _local_apps_to_delete
+        | selectattr('system_defined', 'defined')
+        | selectattr('system_defined', 'equalto', true)
+        | list | length == 0
+    fail_msg: "BUG: system-defined local applications reached the delete list — refusing to proceed"
+  when: _local_apps_to_delete | length > 0
 
 - name: Delete orphaned local applications
   ansible.builtin.uri:
