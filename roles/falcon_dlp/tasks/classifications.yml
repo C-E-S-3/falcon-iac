@@ -43,6 +43,9 @@
           zip(_existing_classifications.json.resources | default([]))
         )
       }}
+
+- name: Classify existing classifications by system vs user
+  ansible.builtin.set_fact:
     _existing_classifications_system: >-
       {{
         (_existing_classifications_list | rejectattr('system_defined', 'defined') | list)

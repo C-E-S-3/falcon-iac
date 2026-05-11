@@ -43,6 +43,9 @@
           zip(_existing_sensitivity_labels.json.resources | default([]))
         )
       }}
+
+- name: Classify existing sensitivity labels by system vs user
+  ansible.builtin.set_fact:
     _existing_labels_system: >-
       {{
         (_existing_labels_list | rejectattr('system_defined', 'defined') | list)

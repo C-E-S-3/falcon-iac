@@ -43,6 +43,9 @@
           zip(_existing_enterprise_accounts.json.resources | default([]))
         )
       }}
+
+- name: Classify existing enterprise accounts by system vs user
+  ansible.builtin.set_fact:
     _existing_enterprise_accounts_system: >-
       {{
         (_existing_enterprise_accounts_list | rejectattr('system_defined', 'defined') | list)

@@ -43,6 +43,9 @@
           zip(_existing_local_applications.json.resources | default([]))
         )
       }}
+
+- name: Classify existing local applications by system vs user
+  ansible.builtin.set_fact:
     _existing_local_apps_system: >-
       {{
         (_existing_local_apps_list | rejectattr('system_defined', 'defined') | list)

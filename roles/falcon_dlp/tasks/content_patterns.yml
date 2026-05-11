@@ -43,6 +43,9 @@
           zip(_existing_content_patterns.json.resources | default([]))
         )
       }}
+
+- name: Classify existing content patterns by system vs user
+  ansible.builtin.set_fact:
     _existing_patterns_system: >-
       {{
         (_existing_patterns_list | rejectattr('system_defined', 'defined') | list)

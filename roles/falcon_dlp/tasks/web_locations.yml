@@ -43,6 +43,9 @@
           zip(_existing_web_locations.json.resources | default([]))
         )
       }}
+
+- name: Classify existing web locations by system vs user
+  ansible.builtin.set_fact:
     _existing_web_locations_system: >-
       {{
         (_existing_web_locations_list | rejectattr('system_defined', 'defined') | list)

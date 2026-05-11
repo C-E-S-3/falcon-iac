@@ -43,6 +43,9 @@
           zip(_existing_local_app_groups.json.resources | default([]))
         )
       }}
+
+- name: Classify existing local application groups by system vs user
+  ansible.builtin.set_fact:
     _existing_local_app_groups_system: >-
       {{
         (_existing_local_app_groups_list | rejectattr('system_defined', 'defined') | list)

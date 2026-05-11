@@ -43,6 +43,9 @@
           zip(_existing_policies.json.resources | default([]))
         )
       }}
+
+- name: Classify existing policies by system vs user
+  ansible.builtin.set_fact:
     _existing_policies_system: >-
       {{
         (_existing_policies_list | rejectattr('system_defined', 'defined') | list)

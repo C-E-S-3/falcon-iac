@@ -43,6 +43,9 @@
           zip(_existing_cloud_applications.json.resources | default([]))
         )
       }}
+
+- name: Classify existing cloud applications by system vs user
+  ansible.builtin.set_fact:
     _existing_cloud_apps_system: >-
       {{
         (_existing_cloud_apps_list | rejectattr('system_defined', 'defined') | list)
