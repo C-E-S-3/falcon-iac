@@ -115,10 +115,21 @@
   ansible.builtin.set_fact:
     _classifications_to_delete: >-
       {{
-        _existing_classifications_list |
-        rejectattr('name', 'in', falcon_dlp_classifications | map(attribute='name') | list) |
-        rejectattr('system_defined', 'equalto', true) |
-        list
+        (_candidates
+         | selectattr('system_defined', 'defined')
+         | rejectattr('system_defined', 'equalto', true)
+         | list)
+        +
+        (_candidates
+         | rejectattr('system_defined', 'defined')
+         | list)
+      }}
+  vars:
+    _candidates: >-
+      {{
+        _existing_classifications_list
+        | rejectattr('name', 'in', falcon_dlp_classifications | map(attribute='name') | list)
+        | list
       }}
 
 - name: Display classification changes summary

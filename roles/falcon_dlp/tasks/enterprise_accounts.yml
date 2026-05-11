@@ -68,10 +68,21 @@
   ansible.builtin.set_fact:
     _enterprise_accounts_to_delete: >-
       {{
-        _existing_enterprise_accounts_list |
-        rejectattr('name', 'in', falcon_dlp_enterprise_accounts | map(attribute='name') | list) |
-        rejectattr('system_defined', 'equalto', true) |
-        list
+        (_candidates
+         | selectattr('system_defined', 'defined')
+         | rejectattr('system_defined', 'equalto', true)
+         | list)
+        +
+        (_candidates
+         | rejectattr('system_defined', 'defined')
+         | list)
+      }}
+  vars:
+    _candidates: >-
+      {{
+        _existing_enterprise_accounts_list
+        | rejectattr('name', 'in', falcon_dlp_enterprise_accounts | map(attribute='name') | list)
+        | list
       }}
 
 - name: Display enterprise account changes summary

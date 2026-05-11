@@ -89,10 +89,21 @@
   ansible.builtin.set_fact:
     _policies_to_delete: >-
       {{
-        _existing_policies_list |
-        rejectattr('name', 'in', falcon_dlp_policies | map(attribute='name') | list) |
-        rejectattr('system_defined', 'equalto', true) |
-        list
+        (_candidates
+         | selectattr('system_defined', 'defined')
+         | rejectattr('system_defined', 'equalto', true)
+         | list)
+        +
+        (_candidates
+         | rejectattr('system_defined', 'defined')
+         | list)
+      }}
+  vars:
+    _candidates: >-
+      {{
+        _existing_policies_list
+        | rejectattr('name', 'in', falcon_dlp_policies | map(attribute='name') | list)
+        | list
       }}
 
 - name: Display policy changes summary

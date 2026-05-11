@@ -68,10 +68,21 @@
   ansible.builtin.set_fact:
     _patterns_to_delete: >-
       {{
-        _existing_patterns_list |
-        rejectattr('name', 'in', falcon_dlp_content_patterns | map(attribute='name') | list) |
-        rejectattr('system_defined', 'equalto', true) |
-        list
+        (_candidates
+         | selectattr('system_defined', 'defined')
+         | rejectattr('system_defined', 'equalto', true)
+         | list)
+        +
+        (_candidates
+         | rejectattr('system_defined', 'defined')
+         | list)
+      }}
+  vars:
+    _candidates: >-
+      {{
+        _existing_patterns_list
+        | rejectattr('name', 'in', falcon_dlp_content_patterns | map(attribute='name') | list)
+        | list
       }}
 
 - name: Display content pattern changes summary

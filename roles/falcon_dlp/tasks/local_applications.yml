@@ -68,10 +68,21 @@
   ansible.builtin.set_fact:
     _local_apps_to_delete: >-
       {{
-        _existing_local_apps_list |
-        rejectattr('name', 'in', falcon_dlp_local_applications | map(attribute='name') | list) |
-        rejectattr('system_defined', 'equalto', true) |
-        list
+        (_candidates
+         | selectattr('system_defined', 'defined')
+         | rejectattr('system_defined', 'equalto', true)
+         | list)
+        +
+        (_candidates
+         | rejectattr('system_defined', 'defined')
+         | list)
+      }}
+  vars:
+    _candidates: >-
+      {{
+        _existing_local_apps_list
+        | rejectattr('name', 'in', falcon_dlp_local_applications | map(attribute='name') | list)
+        | list
       }}
 
 - name: Display local application changes summary
