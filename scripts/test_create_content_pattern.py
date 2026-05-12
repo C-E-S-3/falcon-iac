@@ -12,14 +12,14 @@ deliberately does NOT load them from a file; do not commit credentials.
 
 Cloud region: set FALCON_CLOUD (default us-1).
 
+Requires: requests (`pip install requests`).
+
 Usage:
     export FALCON_CLIENT_ID=...
     export FALCON_CLIENT_SECRET=...
     python3 scripts/test_create_content_pattern.py
 
-To test a different body shape, edit the PATTERN dict or swap in one of
-the variants in the if __name__ == '__main__' block at the bottom. No
-third-party dependencies -- pure stdlib.
+To test a different body shape, edit the PATTERN dict at the bottom.
 """
 
 from __future__ import annotations
@@ -27,9 +27,8 @@ from __future__ import annotations
 import json
 import os
 import sys
-import urllib.error
-import urllib.parse
-import urllib.request
+
+import requests
 
 # ---------------------------------------------------------------------------
 # Credentials -- prefer env vars; do NOT commit literal secrets here.
@@ -72,33 +71,26 @@ PATTERN = {
 
 
 def get_token(base_url: str) -> str:
-    url = f"{base_url}/oauth2/token"
-    data = urllib.parse.urlencode(
-        {"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET}
-    ).encode()
-    req = urllib.request.Request(
-        url,
-        data=data,
-        method="POST",
+    resp = requests.post(
+        f"{base_url}/oauth2/token",
+        data={"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET},
         headers={"Content-Type": "application/x-www-form-urlencoded"},
+        timeout=30,
     )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            payload = json.loads(resp.read())
-    except urllib.error.HTTPError as e:
-        print(f"OAuth status: {e.code}", file=sys.stderr)
-        print(e.read().decode(), file=sys.stderr)
+    if not resp.ok:
+        print(f"OAuth status: {resp.status_code}", file=sys.stderr)
+        print(resp.text, file=sys.stderr)
         sys.exit(1)
-    return payload["access_token"]
+    return resp.json()["access_token"]
 
 
 def post_pattern(base_url: str, token: str, body: dict) -> None:
     url = f"{base_url}{ENDPOINT}"
-    body_bytes = json.dumps(body).encode()
+    body_json = json.dumps(body)
 
     print("-" * 70)
     print(f"POST {url}")
-    print(f"Content-Length: {len(body_bytes)}")
+    print(f"Content-Length: {len(body_json)}")
     print("Request body (pretty):")
     print(json.dumps(body, indent=2))
     print()
@@ -107,40 +99,29 @@ def post_pattern(base_url: str, token: str, body: dict) -> None:
         f"curl -sS -X POST '{url}' \\\n"
         f"  -H 'Authorization: Bearer ***' \\\n"
         f"  -H 'Content-Type: application/json' \\\n"
-        f"  --data '{json.dumps(body)}'"
+        f"  --data '{body_json}'"
     )
     print("-" * 70)
 
-    req = urllib.request.Request(
+    resp = requests.post(
         url,
-        data=body_bytes,
-        method="POST",
+        json=body,
         headers={
             "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
             "Accept": "application/json",
         },
+        timeout=30,
     )
-    try:
-        with urllib.request.urlopen(req) as resp:
-            status = resp.status
-            resp_headers = dict(resp.headers)
-            resp_body = resp.read().decode()
-    except urllib.error.HTTPError as e:
-        status = e.code
-        resp_headers = dict(e.headers)
-        resp_body = e.read().decode()
 
-    print(f"Status: {status}")
+    print(f"Status: {resp.status_code}")
     print("Response headers:")
-    for k, v in resp_headers.items():
+    for k, v in resp.headers.items():
         print(f"  {k}: {v}")
     print("Response body:")
     try:
-        parsed = json.loads(resp_body)
-        print(json.dumps(parsed, indent=2))
-    except json.JSONDecodeError:
-        print(resp_body)
+        print(json.dumps(resp.json(), indent=2))
+    except ValueError:
+        print(resp.text)
 
 
 def main() -> None:
