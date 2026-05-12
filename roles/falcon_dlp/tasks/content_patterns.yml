@@ -122,25 +122,17 @@
       item.min_match_threshold = {{ item.min_match_threshold | default('<MISSING>') | to_json }}
       item (full)              = {{ item | to_json }}
 
-      ----- JSON body about to be sent to CrowdStrike -----
-      {{ _preview_body | to_nice_json }}
+      ----- regex array that will be sent (after schema transform) -----
+      {{ _regex_objs | to_nice_json }}
   loop: "{{ _patterns_to_create }}"
   loop_control:
     label: "{{ item.name | default('<missing-name>') }}"
   vars:
-    _preview_body_yaml: |
-      resources:
-        - name: {{ item.name | to_json }}
-          description: {{ item.description | default('') | to_json }}
-          category: {{ item.category | default('custom') | to_json }}
-          region: {{ item.region | default('global') | to_json }}
-          min_match_threshold: {{ item.min_match_threshold | default(1) | int }}
-          regex:
-      {% for r in item.regexes | default([]) %}
-            - regex_string: {{ r | to_json }}
-              example: {{ item.example | default('') | to_json }}
-      {% endfor %}
-    _preview_body: "{{ _preview_body_yaml | from_yaml }}"
+    _regex_objs: >-
+      {{ (item.regexes | default([]))
+         | map('community.general.dict_kv', 'regex_string')
+         | map('combine', {'example': item.example | default('')})
+         | list }}
   when:
     - falcon_dlp_debug | default(false) | bool
     - _patterns_to_create | length > 0
@@ -149,17 +141,14 @@
 # Body schema (CrowdStrike DLP content-patterns/v1):
 #   {resources: [{name, description, category, region, min_match_threshold,
 #                 regex: [{regex_string, example}, ...]}]}
-# Note `regex` (not `regexes`) is the array name, and each entry is an
-# object with regex_string + example. The IaC YAML carries flat
-# `regexes:` + a single top-level `example:`; we expand that to the
-# per-regex object array the API wants.
+# `regex` (not `regexes`) is the array name, and each entry is an
+# object with regex_string + example. The IaC YAML carries a flat
+# `regexes:` list and a single top-level `example:`; the _regex_objs
+# var below expands that into the per-regex object array the API
+# wants, applying the single example to each regex entry.
 #
-# Build mechanism: render a YAML body string via Jinja2 ({% for %}),
-# then `from_yaml` once -- which returns a native Python dict with
-# proper int / list / dict types. Pass that dict to the uri module
-# as a structured body and let it handle JSON serialization. This is
-# more reliable than raw-body + to_json piping in some Ansible
-# versions, which can mangle the body string.
+# Body is a normal YAML mapping -- the uri module builds and serializes
+# the JSON itself when body_format is json.
 - name: Create new content patterns
   ansible.builtin.uri:
     url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}"
@@ -167,7 +156,14 @@
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
     body_format: json
-    body: "{{ _create_body }}"
+    body:
+      resources:
+        - name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          category: "{{ item.category | default('custom') }}"
+          region: "{{ item.region | default('global') }}"
+          min_match_threshold: "{{ item.min_match_threshold | default(1) | int }}"
+          regex: "{{ _regex_objs }}"
     return_content: true
     status_code: [200, 201, 400, 401, 403, 409, 422, 500]
   loop: "{{ _patterns_to_create }}"
@@ -175,19 +171,11 @@
     label: "{{ item.name }}"
   register: _create_patterns_result
   vars:
-    _create_body_yaml: |
-      resources:
-        - name: {{ item.name | to_json }}
-          description: {{ item.description | default('') | to_json }}
-          category: {{ item.category | default('custom') | to_json }}
-          region: {{ item.region | default('global') | to_json }}
-          min_match_threshold: {{ item.min_match_threshold | default(1) | int }}
-          regex:
-      {% for r in item.regexes | default([]) %}
-            - regex_string: {{ r | to_json }}
-              example: {{ item.example | default('') | to_json }}
-      {% endfor %}
-    _create_body: "{{ _create_body_yaml | from_yaml }}"
+    _regex_objs: >-
+      {{ (item.regexes | default([]))
+         | map('community.general.dict_kv', 'regex_string')
+         | map('combine', {'example': item.example | default('')})
+         | list }}
   when:
     - _patterns_to_create | length > 0
     - _falcon_state_actions[falcon_dlp_state_mode].create | bool
@@ -223,8 +211,7 @@
     - (_create_patterns_result.results | selectattr('status', 'defined') | rejectattr('status', 'in', [200, 201]) | list | length) > 0
 
 # Update existing content patterns -- same body schema as create plus
-# the resource id. Body built via YAML | from_yaml so types stay native;
-# uri module handles JSON serialization via body_format: json.
+# the resource id.
 - name: Update existing content patterns
   ansible.builtin.uri:
     url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}"
@@ -233,22 +220,21 @@
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200]
     body_format: json
-    body: "{{ _update_body }}"
-  vars:
-    _update_body_yaml: |
+    body:
       resources:
-        - id: {{ _existing_patterns_by_name[item.name].id | to_json }}
-          name: {{ item.name | to_json }}
-          description: {{ item.description | default('') | to_json }}
-          category: {{ item.category | default('custom') | to_json }}
-          region: {{ item.region | default('global') | to_json }}
-          min_match_threshold: {{ item.min_match_threshold | default(1) | int }}
-          regex:
-      {% for r in item.regexes | default([]) %}
-            - regex_string: {{ r | to_json }}
-              example: {{ item.example | default('') | to_json }}
-      {% endfor %}
-    _update_body: "{{ _update_body_yaml | from_yaml }}"
+        - id: "{{ _existing_patterns_by_name[item.name].id }}"
+          name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          category: "{{ item.category | default('custom') }}"
+          region: "{{ item.region | default('global') }}"
+          min_match_threshold: "{{ item.min_match_threshold | default(1) | int }}"
+          regex: "{{ _regex_objs }}"
+  vars:
+    _regex_objs: >-
+      {{ (item.regexes | default([]))
+         | map('community.general.dict_kv', 'regex_string')
+         | map('combine', {'example': item.example | default('')})
+         | list }}
   loop: "{{ _patterns_to_update }}"
   loop_control:
     label: "{{ item.name }}"
