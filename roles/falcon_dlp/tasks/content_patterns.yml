@@ -136,6 +136,9 @@
 # bypasses any uri-module argument type coercion that strips list/int
 # types when running under Ansible's default (non-native) Jinja2 mode.
 # Content-Type: application/json is set in _falcon_auth_headers.
+#
+# Accept 4xx codes and use ignore_errors so the play continues past
+# this task long enough for the response-dump task below to fire.
 - name: Create new content patterns
   ansible.builtin.uri:
     url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}"
@@ -145,34 +148,44 @@
     body_format: raw
     body: "{{ {'resources': [{'name': item.name, 'description': item.description | default(''), 'category': item.category | default('custom'), 'region': item.region | default('global'), 'min_match_threshold': item.min_match_threshold | default(1) | int, 'regexes': item.regexes | default([]), 'example': item.example | default('')}]} | to_json }}"
     return_content: true
-    status_code: [200, 201, 400, 401, 403, 409, 422]
+    status_code: [200, 201, 400, 401, 403, 409, 422, 500]
   loop: "{{ _patterns_to_create }}"
   loop_control:
     label: "{{ item.name }}"
   register: _create_patterns_result
-  failed_when:
-    - _create_patterns_result.status is defined
-    - _create_patterns_result.status not in [200, 201]
   when:
     - _patterns_to_create | length > 0
     - _falcon_state_actions[falcon_dlp_state_mode].create | bool
-  retries: "{{ falcon_api_retries }}"
-  delay: "{{ falcon_api_retry_delay }}"
-  until: _create_patterns_result is succeeded
+  ignore_errors: true
 
-- name: Show API response on content pattern create failure
+- name: "[DIAG] Full API response for every content pattern create attempt"
   ansible.builtin.debug:
     msg: |
-      Pattern: {{ item.item.name }}
-      Status:  {{ item.status | default('n/a') }}
-      Errors:  {{ item.json.errors | default(item.content | default('no body')) }}
+      ==================== {{ item.item.name | default('?') }} ====================
+      HTTP status : {{ item.status | default('n/a') }}
+      url         : {{ item.url | default('n/a') }}
+      response.json (parsed):
+        {{ item.json | default('<no json>') | to_nice_json | indent(8) }}
+      response.content (raw, first 800 chars):
+        {{ (item.content | default('<no body>'))[:800] }}
   loop: "{{ _create_patterns_result.results | default([]) }}"
   loop_control:
-    label: "{{ item.item.name | default('n/a') }}"
+    label: "{{ item.item.name | default('?') }}"
   when:
     - _create_patterns_result is defined
     - _create_patterns_result.results is defined
-    - item.failed | default(false) | bool
+
+- name: Fail the play if any content pattern create returned non-2xx
+  ansible.builtin.fail:
+    msg: >-
+      {{ _create_patterns_result.results
+         | selectattr('status', 'defined')
+         | rejectattr('status', 'in', [200, 201])
+         | map(attribute='item.name') | list }}
+      failed to create. See the [DIAG] output above for the full API response.
+  when:
+    - _create_patterns_result.results is defined
+    - (_create_patterns_result.results | selectattr('status', 'defined') | rejectattr('status', 'in', [200, 201]) | list | length) > 0
 
 # Update existing content patterns
 - name: Update existing content patterns
