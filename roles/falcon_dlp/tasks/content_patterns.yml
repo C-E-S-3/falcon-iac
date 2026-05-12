@@ -102,7 +102,37 @@
         To Delete: {{ _patterns_to_delete | map(attribute='name') | list | join(', ') or 'None' }}
         State Mode: {{ falcon_dlp_state_mode }}
 
-# Create new content patterns
+# Create new content patterns.
+#
+# The body is built as a single native Jinja2 expression (rather than a
+# YAML mapping of templated string scalars) so that list and int fields
+# -- regexes, min_match_threshold -- are passed to the API as JSON
+# arrays/numbers, not as their string representations. Wrapping each
+# value in "{{ ... }}" coerces it to a string under Ansible's default
+# (non-native) Jinja2 templating, which corrupts the body and can make
+# CrowdStrike return misleading errors like "content pattern name is
+# required" because validation aborts before reaching the name check.
+- name: Show content pattern body about to be POSTed (debug)
+  ansible.builtin.debug:
+    var: _create_pattern_body
+  vars:
+    _create_pattern_body:
+      resources:
+        - name: "{{ item.name }}"
+          description: "{{ item.description | default('') }}"
+          category: "{{ item.category | default('custom') }}"
+          region: "{{ item.region | default('global') }}"
+          min_match_threshold: "{{ item.min_match_threshold | default(1) | int }}"
+          regexes: "{{ item.regexes | default([]) }}"
+          example: "{{ item.example | default('') }}"
+  loop: "{{ _patterns_to_create }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - falcon_dlp_debug | default(false) | bool
+    - _patterns_to_create | length > 0
+    - _falcon_state_actions[falcon_dlp_state_mode].create | bool
+
 - name: Create new content patterns
   ansible.builtin.uri:
     url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}"
@@ -111,25 +141,35 @@
     timeout: "{{ falcon_api_timeout }}"
     status_code: [200, 201]
     body_format: json
-    body:
-      resources:
-        - name: "{{ item.name }}"
-          description: "{{ item.description | default('') }}"
-          category: "{{ item.category | default('custom') }}"
-          region: "{{ item.region | default('global') }}"
-          min_match_threshold: "{{ item.min_match_threshold | default(1) }}"
-          regexes: "{{ item.regexes | default([]) }}"
-          example: "{{ item.example | default('') }}"
+    body: "{{ {'resources': [{'name': item.name, 'description': item.description | default(''), 'category': item.category | default('custom'), 'region': item.region | default('global'), 'min_match_threshold': item.min_match_threshold | default(1) | int, 'regexes': item.regexes | default([]), 'example': item.example | default('')}]} }}"
+    return_content: true
   loop: "{{ _patterns_to_create }}"
   loop_control:
     label: "{{ item.name }}"
   register: _create_patterns_result
+  failed_when:
+    - _create_patterns_result.status is defined
+    - _create_patterns_result.status not in [200, 201]
   when:
     - _patterns_to_create | length > 0
     - _falcon_state_actions[falcon_dlp_state_mode].create | bool
   retries: "{{ falcon_api_retries }}"
   delay: "{{ falcon_api_retry_delay }}"
   until: _create_patterns_result is succeeded
+
+- name: Show API response on content pattern create failure
+  ansible.builtin.debug:
+    msg: |
+      Pattern: {{ item.item.name }}
+      Status:  {{ item.status | default('n/a') }}
+      Errors:  {{ item.json.errors | default(item.content | default('no body')) }}
+  loop: "{{ _create_patterns_result.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name | default('n/a') }}"
+  when:
+    - _create_patterns_result is defined
+    - _create_patterns_result.results is defined
+    - item.failed | default(false) | bool
 
 # Update existing content patterns
 - name: Update existing content patterns
