@@ -112,37 +112,40 @@
 # (non-native) Jinja2 templating, which corrupts the body and can make
 # CrowdStrike return misleading errors like "content pattern name is
 # required" because validation aborts before reaching the name check.
-- name: Show content pattern body about to be POSTed (debug)
+- name: Show raw item + rendered JSON body before each POST (debug)
   ansible.builtin.debug:
-    var: _create_pattern_body
-  vars:
-    _create_pattern_body:
-      resources:
-        - name: "{{ item.name }}"
-          description: "{{ item.description | default('') }}"
-          category: "{{ item.category | default('custom') }}"
-          region: "{{ item.region | default('global') }}"
-          min_match_threshold: "{{ item.min_match_threshold | default(1) | int }}"
-          regexes: "{{ item.regexes | default([]) }}"
-          example: "{{ item.example | default('') }}"
+    msg: |
+      ----- item from _patterns_to_create -----
+      item.name                = {{ item.name | default('<MISSING>') | to_json }}
+      item.description         = {{ item.description | default('<MISSING>') | to_json }}
+      item.regexes             = {{ item.regexes | default('<MISSING>') | to_json }}
+      item.min_match_threshold = {{ item.min_match_threshold | default('<MISSING>') | to_json }}
+      item (full)              = {{ item | to_json }}
+
+      ----- JSON body about to be sent to CrowdStrike -----
+      {{ {'resources': [{'name': item.name, 'description': item.description | default(''), 'category': item.category | default('custom'), 'region': item.region | default('global'), 'min_match_threshold': item.min_match_threshold | default(1) | int, 'regexes': item.regexes | default([]), 'example': item.example | default('')}]} | to_nice_json }}
   loop: "{{ _patterns_to_create }}"
   loop_control:
-    label: "{{ item.name }}"
+    label: "{{ item.name | default('<missing-name>') }}"
   when:
     - falcon_dlp_debug | default(false) | bool
     - _patterns_to_create | length > 0
     - _falcon_state_actions[falcon_dlp_state_mode].create | bool
 
+# Body is built with `to_json` to a string and sent as raw, which
+# bypasses any uri-module argument type coercion that strips list/int
+# types when running under Ansible's default (non-native) Jinja2 mode.
+# Content-Type: application/json is set in _falcon_auth_headers.
 - name: Create new content patterns
   ansible.builtin.uri:
     url: "{{ falcon_base_url }}{{ _falcon_endpoints.content_patterns_entities }}"
     method: POST
     headers: "{{ _falcon_auth_headers }}"
     timeout: "{{ falcon_api_timeout }}"
-    status_code: [200, 201]
-    body_format: json
-    body: "{{ {'resources': [{'name': item.name, 'description': item.description | default(''), 'category': item.category | default('custom'), 'region': item.region | default('global'), 'min_match_threshold': item.min_match_threshold | default(1) | int, 'regexes': item.regexes | default([]), 'example': item.example | default('')}]} }}"
+    body_format: raw
+    body: "{{ {'resources': [{'name': item.name, 'description': item.description | default(''), 'category': item.category | default('custom'), 'region': item.region | default('global'), 'min_match_threshold': item.min_match_threshold | default(1) | int, 'regexes': item.regexes | default([]), 'example': item.example | default('')}]} | to_json }}"
     return_content: true
+    status_code: [200, 201, 400, 401, 403, 409, 422]
   loop: "{{ _patterns_to_create }}"
   loop_control:
     label: "{{ item.name }}"
